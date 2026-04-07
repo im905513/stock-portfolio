@@ -93,6 +93,7 @@ class StockIn(BaseModel):
     market: str
     sector: Optional[str] = None
     currency: str = "TWD"
+    investment_style: Optional[str] = "dca"
 
 class TradeIn(BaseModel):
     stock_id: int
@@ -123,8 +124,8 @@ def create_stock(s: StockIn):
     with get_db() as db:
         try:
             cur = db.execute(
-                "INSERT INTO stocks (symbol,name,market,sector,currency) VALUES (?,?,?,?,?)",
-                (s.symbol, s.name, s.market, s.sector, s.currency)
+                "INSERT INTO stocks (symbol,name,market,sector,currency,investment_style) VALUES (?,?,?,?,?,?)",
+                (s.symbol, s.name, s.market, s.sector, s.currency, s.investment_style)
             )
             db.commit()
             return {"id": cur.lastrowid, **s.model_dump()}
@@ -186,7 +187,7 @@ def list_positions():
             SELECT s.id, s.symbol, s.name, s.market, s.currency,
                    COALESCE(SUM(CASE WHEN t.action='buy' THEN t.shares WHEN t.action='sell' THEN -t.shares ELSE 0 END),0) AS shares,
                    COALESCE(SUM(CASE WHEN t.action='buy' THEN t.shares*t.price WHEN t.action='sell' THEN -t.shares*t.price ELSE 0 END),0) AS cost_basis,
-                   s.sector
+                   s.sector, s.investment_style
             FROM stocks s
             LEFT JOIN trades t ON s.id=t.stock_id
             GROUP BY s.id
@@ -416,7 +417,9 @@ def get_ai_export(stock_id: int):
         """, (stock_id,)).fetchone()
 
     lines = []
-    lines.append(f"股票：{stock['symbol']} {stock['name']}（{stock['sector'] or '其他'}）")
+    style_map = {'dca': '存股', 'thematic': '題材/價差', 'trade': '短線交易'}
+    style_label = style_map.get(stock.get('investment_style'), '存股')
+    lines.append(f"股票：{stock['symbol']} {stock['name']}（{stock['sector'] or '其他'} | {style_label}）")
     lines.append(f"快照時間：{datetime.now().strftime('%Y-%m-%d %H:%M')} GMT+8")
     lines.append("")
 

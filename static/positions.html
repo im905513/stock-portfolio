@@ -69,15 +69,17 @@
       }
 
       let totalCost = 0;
-      let html = '<table><thead><tr><th>SYMBOL</th><th>NAME</th><th>MKT</th><th>SECTOR</th><th>SHARES</th><th>AVG COST</th><th>COST BASIS</th></tr></thead><tbody>';
+      let html = '<table><thead><tr><th>SYMBOL</th><th>NAME</th><th>MKT</th><th>STYLE</th><th>SECTOR</th><th>SHARES</th><th>AVG COST</th><th>COST BASIS</th></tr></thead><tbody>';
       for (const p of positions) {
         const tagCls = p.market === 'TW' ? 'tag-tw' : 'tag-us';
         const sym = p.currency === 'USD' ? '$' : 'NT$';
         if (p.currency !== 'USD') totalCost += Number(p.cost_basis);
+        const styleTag = p.investment_style === 'dca' ? '<span class="tag tag-dca">存股</span>' : p.investment_style === 'thematic' ? '<span class="tag tag-thematic">題材</span>' : '<span class="tag">'+p.investment_style+'</span>';
         html += `<tr>
           <td><strong>${p.symbol}</strong></td>
           <td>${p.name}</td>
           <td><span class="tag ${tagCls}">${p.market}</span></td>
+          <td>${styleTag}</td>
           <td>${p.sector || '-'}</td>
           <td>${Number(p.shares).toLocaleString()}</td>
           <td>${sym}${Number(p.avg_cost).toLocaleString()}</td>

@@ -772,3 +772,5 @@ button.secondary:hover {
   animation: shimmer 1.5s infinite;
   border-radius: 2px;
 }
+.tag-dca { background: rgba(61, 220, 151, 0.12); color: var(--green); border: 1px solid rgba(61, 220, 151, 0.3); }
+.tag-thematic { background: rgba(255, 136, 0, 0.12); color: var(--orange); border: 1px solid rgba(255, 136, 0, 0.3); }
