@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FUNDAMENTALS · GOLDMAN TERMINAL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/static/terminal.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <i data-lucide="activity"></i>
+      <span class="brand-name">GOLDMAN<span class="accent">TERMINAL</span></span>
+      <span class="status-pill">FUNDAMENTALS</span>
+    </div>
+    <div class="topbar-right">
+      <span class="live-dot"></span>
+      <span class="live-text">即時連線</span>
+    </div>
+  </header>
+
+  <nav class="sidebar">
+    <a href="/" class="nav-item"><i data-lucide="layout-dashboard"></i><span>首頁</span></a>
+    <a href="/dashboard" class="nav-item"><i data-lucide="bar-chart-3"></i><span>儀表板</span></a>
+    <a href="/positions" class="nav-item"><i data-lucide="briefcase"></i><span>持股</span></a>
+    <a href="/trades" class="nav-item"><i data-lucide="repeat-2"></i><span>交易</span></a>
+    <a href="/fundamentals" class="nav-item"><i data-lucide="pie-chart"></i><span>產業/基本面</span></a>
+    <a href="/stocks" class="nav-item"><i data-lucide="building-2"></i><span>股票</span></a>
+  </nav>
+
+  <main class="main-content">
+    <!-- Stock selector -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">[ SELECT STOCK ]</span>
+      </div>
+      <div class="panel-body">
+        <select id="stock-select" class="terminal-select">
+          <option value="">— 選擇股票 —</option>
+        </select>
+        <div id="stock-info" class="stat-sub" style="margin-top:0.8rem"></div>
+      </div>
+    </div>
+
+    <!-- Fundamentals grid -->
+    <div id="fundamentals-content" style="display:none">
+      <div class="grid-3">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">[ VALUATION ]</span>
+          </div>
+          <div class="panel-body">
+            <div class="mini-stat">
+              <span class="label">本益比 P/E</span>
+              <span class="value accent" id="val-per">--</span>
+            </div>
+            <div class="mini-stat">
+              <span class="label">殖利率 %</span>
+              <span class="value green" id="val-yield">--</span>
+            </div>
+            <div class="mini-stat">
+              <span class="label">股價淨值比 P/B</span>
+              <span class="value blue" id="val-pbr">--</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">[ 三大法人買賣超 ]</span>
+            <span class="panel-meta">近5日</span>
+          </div>
+          <div class="panel-body" id="inst-panel">
+            <div id="inst-table"><div class="empty">LOADING...</div></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">[ 月營收趨勢 ]</span>
+            <span class="panel-meta">近6月</span>
+          </div>
+          <div class="panel-body" id="rev-panel">
+            <div id="rev-table"><div class="empty">LOADING...</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Industry allocation -->
+    <div class="panel" style="margin-top:1rem">
+      <div class="panel-header">
+        <span class="panel-title">[ INDUSTRY ALLOCATION · BY COST ]</span>
+        <span class="panel-meta">產業配置</span>
+      </div>
+      <div class="panel-body">
+        <div id="allocation-table"><div class="empty">LOADING...</div></div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span>GOLDMAN TERMINAL v1.0 · CLASSIFIED</span>
+    <span id="footer-time">--</span>
+  </footer>
+
+  <script src="/static/terminal.js"></script>
+  <script>
+    // Load stock list
+    async function loadStocks() {
+      const res = await fetch('/api/stocks');
+      const stocks = await res.json();
+      const sel = document.getElementById('stock-select');
+      stocks.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = `[${s.market}] ${s.symbol} ${s.name}`;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener('change', () => {
+        if (sel.value) loadFundamentals(sel.value);
+      });
+      loadAllocation();
+    }
+
+    async function loadFundamentals(id) {
+      document.getElementById('fundamentals-content').style.display = 'block';
+      try {
+        const res = await fetch(`/api/fundamentals/${id}`);
+        const data = await res.json();
+        document.getElementById('stock-info').innerHTML =
+          `<strong>${data.stock.symbol}</strong> ${data.stock.name} · ${data.stock.sector || ''} · ${data.stock.market}`;
+
+        document.getElementById('val-per').textContent = data.per ? data.per.toFixed(2) : 'N/A';
+        document.getElementById('val-yield').textContent = data.yield ? (data.yield * 100).toFixed(2) + '%' : 'N/A';
+        document.getElementById('val-pbr').textContent = data.pbr ? data.pbr.toFixed(2) : 'N/A';
+
+        if (data.institutional && data.institutional.length > 0) {
+          let html = '<table><thead><tr><th>日期</th><th>外資</th><th>投信</th><th>自營商</th></tr></thead><tbody>';
+          data.institutional.reverse().forEach(r => {
+            const fmt = n => n > 0 ? `<span class="green">+${n.toLocaleString()}</span>` : n < 0 ? `<span class="red">${n.toLocaleString()}</span>` : '0';
+            html += `<tr>
+              <td>${r.date}</td>
+              <td>${fmt(r.foreign_net)}</td>
+              <td>${fmt(r.investment_trust_net)}</td>
+              <td>${fmt(r.dealer_net)}</td>
+            </tr>`;
+          });
+          html += '</tbody></table>';
+          document.getElementById('inst-table').innerHTML = html;
+        } else {
+          document.getElementById('inst-table').innerHTML = '<div class="empty">N/A</div>';
+        }
+
+        if (data.revenue && data.revenue.length > 0) {
+          let html = '<table><thead><tr><th>月份</th><th>營收</th><th>月增率</th></tr></thead><tbody>';
+          data.revenue.forEach((r, i) => {
+            const rev = Number(r.revenue);
+            const prev = i > 0 ? Number(data.revenue[i-1].revenue) : rev;
+            const mom = prev > 0 ? ((rev - prev) / prev * 100).toFixed(1) : '0';
+            const momCls = rev >= prev ? 'green' : 'red';
+            html += `<tr>
+              <td>${r.date}</td>
+              <td>NT$ ${(rev/1e8).toFixed(2)} 億</td>
+              <td class="${momCls}">${mom}%</td>
+            </tr>`;
+          });
+          html += '</tbody></table>';
+          document.getElementById('rev-table').innerHTML = html;
+        } else {
+          document.getElementById('rev-table').innerHTML = '<div class="empty">N/A</div>';
+        }
+      } catch (e) {
+        document.getElementById('stock-info').innerHTML = `<span class="red">載入失敗: ${e.message}</span>`;
+      }
+    }
+
+    async function loadAllocation() {
+      try {
+        const res = await fetch('/api/industry-allocation');
+        const data = await res.json();
+        if (!data || data.length === 0) {
+          document.getElementById('allocation-table').innerHTML = '<div class="empty">NO DATA</div>';
+          return;
+        }
+        let totalCost = data.reduce((s, r) => s + r.cost, 0);
+        let html = '<table><thead><tr><th>產業</th><th>持股檔數</th><th>成本</th><th>佔比</th><th>分佈</th></tr></thead><tbody>';
+        data.forEach(r => {
+          const pct = r.pct;
+          const bar = '█'.repeat(Math.round(pct / 5)) + '░'.repeat(20 - Math.round(pct / 5));
+          html += `<tr>
+            <td><strong>${r.sector}</strong></td>
+            <td>${r.stock_count}</td>
+            <td>NT$ ${r.cost.toLocaleString()}</td>
+            <td><span class="accent">${pct}%</span></td>
+            <td><span class="text-dim">${bar}</span></td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+        document.getElementById('allocation-table').innerHTML = html;
+      } catch (e) {
+        document.getElementById('allocation-table').innerHTML = `<div class="empty">${e.message}</div>`;
+      }
+    }
+
+    loadStocks();
+    setInterval(() => { if (document.getElementById('stock-select').value) loadFundamentals(document.getElementById('stock-select').value); }, 60000);
+  </script>
+</body>
+</html>

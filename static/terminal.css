@@ -595,3 +595,38 @@ button.secondary:hover {
   .grid-2 { grid-template-columns: 1fr; }
   .objective-grid { grid-template-columns: 1fr 1fr; }
 }
+
+/* ─── Fundamentals page ─── */
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+@media (max-width: 900px) {
+  .grid-3 { grid-template-columns: 1fr; }
+}
+.mini-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.mini-stat:last-child { border-bottom: none; }
+.mini-stat .label { color: var(--text-secondary); }
+.mini-stat .value { font-weight: 600; font-size: 14px; }
+.mini-stat .value.accent { color: var(--accent); }
+.mini-stat .value.green { color: var(--green); }
+.mini-stat .value.blue { color: var(--blue); }
+.terminal-select {
+  background: var(--bg-deeper);
+  border: 1px solid var(--border-bright);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 0.4rem 0.6rem;
+  width: 100%;
+  cursor: pointer;
+}
+.terminal-select:focus { outline: none; border-color: var(--accent); }

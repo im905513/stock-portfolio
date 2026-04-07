@@ -287,3 +287,89 @@ def positions_page():
 # ─── Init ─────────────────────────────────────────────────
 
 init_db()
+
+# ─── Feature 4: Industry Allocation ──────────────────────
+
+@app.get("/api/industry-allocation")
+def industry_allocation():
+    """持股產業分佈（以成本計算）"""
+    with get_db() as db:
+        rows = db.execute("""
+            SELECT s.sector,
+                   SUM(CASE WHEN t.action='buy' THEN t.shares*t.price ELSE -t.shares*t.price END) AS cost,
+                   COUNT(DISTINCT s.id) AS stock_count
+            FROM stocks s
+            JOIN trades t ON s.id=t.stock_id
+            GROUP BY s.sector
+            HAVING cost > 0
+        """).fetchall()
+        total = sum(float(r['cost']) for r in rows)
+        return [{
+            'sector': r['sector'] or '其他',
+            'cost': round(float(r['cost']), 0),
+            'stock_count': r['stock_count'],
+            'pct': round(float(r['cost']) / total * 100, 1) if total > 0 else 0
+        } for r in rows]
+
+# ─── Feature 5: Stock Fundamentals ────────────────────────
+
+@app.get("/api/fundamentals/{stock_id}")
+def get_fundamentals(stock_id: int):
+    """FinMind 個股基本面：本益比、殖利率、PBR、三大法人、月營收"""
+    import urllib.request, json
+    from datetime import date, timedelta
+
+    with get_db() as db:
+        stock = db.execute("SELECT * FROM stocks WHERE id=?", (stock_id,)).fetchone()
+        if not stock:
+            raise HTTPException(404, "找不到這檔股票")
+        stock = dict(stock)
+
+    today = date.today()
+    start = (today - timedelta(days=60)).isoformat()
+    end = today.isoformat()
+    result = {'stock': stock, 'per': None, 'yield': None, 'pbr': None,
+              'institutional': None, 'revenue': None, 'error': None}
+
+    if stock['market'] == 'TW':
+        # 本益比、殖利率、PBR
+        try:
+            url = f"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPER&data_id={stock['symbol']}&start_date={start}&end_date={end}&token="
+            with urllib.request.urlopen(url, timeout=8) as r:
+                data = json.loads(r.read())
+                if data.get('data') and len(data['data']) > 0:
+                    latest = data['data'][-1]
+                    result['per'] = latest.get('PER')
+                    result['yield'] = latest.get('dividend_yield')
+                    result['pbr'] = latest.get('PBR')
+        except Exception as e:
+            result['error'] = str(e)
+
+        # 三大法人
+        try:
+            url = f"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInstitutionalInvestorsBuySell&data_id={stock['symbol']}&start_date={start}&end_date={end}&token="
+            with urllib.request.urlopen(url, timeout=8) as r:
+                data = json.loads(r.read())
+                if data.get('data'):
+                    result['institutional'] = data['data'][-5:]  # 近5日
+        except:
+            pass
+
+        # 月營收
+        try:
+            rev_start = (today - timedelta(days=365)).isoformat()
+            url = f"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockMonthRevenue&data_id={stock['symbol']}&start_date={rev_start}&end_date={end}&token="
+            with urllib.request.urlopen(url, timeout=8) as r:
+                data = json.loads(r.read())
+                if data.get('data'):
+                    result['revenue'] = data['data'][-6:]  # 近6月
+        except:
+            pass
+    else:
+        result['error'] = '美股基本面僅支援台股'
+
+    return result
+
+@app.get("/fundamentals")
+def fundamentals_page():
+    return FileResponse(f"{STATIC_DIR}/fundamentals.html")
