@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TRADES · GOLDMAN TERMINAL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/static/terminal.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <i data-lucide="activity"></i>
+      <span class="brand-name">GOLDMAN<span class="accent">TERMINAL</span></span>
+      <span class="status-pill">TRADES</span>
+    </div>
+    <div class="topbar-right">
+      <span class="lang"><i data-lucide="languages"></i> 中</span>
+      <span class="live-dot"></span>
+      <span class="live-text">即時連線</span>
+    </div>
+  </header>
+
+  <div class="ticker-bar">
+    <div class="ticker-track" id="ticker-track">
+      <span class="ticker-loading">載入即時數據中...</span>
+    </div>
+  </div>
+
+  <nav class="sidebar">
+    <a href="/" class="nav-item"><i data-lucide="layout-dashboard"></i><span>首頁</span></a>
+    <a href="/dashboard" class="nav-item"><i data-lucide="bar-chart-3"></i><span>儀表板</span></a>
+    <a href="/positions" class="nav-item"><i data-lucide="briefcase"></i><span>持股</span></a>
+    <a href="/trades" class="nav-item active"><i data-lucide="repeat-2"></i><span>交易</span></a>
+    <a href="/stocks" class="nav-item"><i data-lucide="building-2"></i><span>股票</span></a>
+  </nav>
+
+  <main class="main-content">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">[ NEW TRADE ]</span>
+        <span class="panel-meta">EXECUTE ORDER</span>
+      </div>
+      <div class="panel-body">
+        <div id="msg" class="msg"></div>
+        <form class="terminal-form" onsubmit="addTrade(event)">
+          <div class="form-row">
+            <select id="stock_id" required><option value="">-- SELECT SYMBOL --</option></select>
+            <input type="date" id="trade_date" required value="">
+            <select id="action" required>
+              <option value="buy">BUY</option>
+              <option value="sell">SELL</option>
+              <option value="dividend">DIVIDEND</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <input type="number" id="shares" placeholder="SHARES" step="any" required>
+            <input type="number" id="price" placeholder="PRICE" step="any" required>
+            <input type="number" id="fee" placeholder="FEE" step="any" value="0">
+            <select id="currency">
+              <option value="TWD">TWD</option>
+              <option value="USD">USD</option>
+            </select>
+          </div>
+          <input type="text" id="note" placeholder="NOTE (OPTIONAL)">
+          <div>
+            <button type="submit"><i data-lucide="plus-circle" style="width:14px;height:14px;vertical-align:middle;margin-right:6px;"></i>EXECUTE</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">[ TRADE HISTORY ]</span>
+        <span class="panel-meta" id="meta">--</span>
+      </div>
+      <div class="panel-body">
+        <div class="form-row" style="margin-bottom:1rem;">
+          <select id="filter-stock"><option value="">ALL SYMBOLS</option></select>
+          <select id="filter-action">
+            <option value="">ALL ACTIONS</option>
+            <option value="buy">BUY</option>
+            <option value="sell">SELL</option>
+            <option value="dividend">DIVIDEND</option>
+          </select>
+        </div>
+        <div id="list"><div class="empty">LOADING...</div></div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span>GOLDMAN TERMINAL v1.0 · CLASSIFIED</span>
+    <span id="footer-time">--</span>
+  </footer>
+
+  <script src="/static/terminal.js"></script>
+  <script>
+    let allTrades = [];
+    let allStocks = [];
+
+    document.getElementById('trade_date').value = new Date().toISOString().slice(0,10);
+
+    async function load() {
+      const [tradesRes, stocksRes] = await Promise.all([
+        fetch('/api/trades'),
+        fetch('/api/stocks')
+      ]);
+      allTrades = await tradesRes.json();
+      allStocks = await stocksRes.json();
+
+      const stockSelect = document.getElementById('stock_id');
+      const filterStock = document.getElementById('filter-stock');
+      const opts = allStocks.map(s => `<option value="${s.id}">${s.symbol} ${s.name}</option>`).join('');
+      stockSelect.innerHTML = '<option value="">-- SELECT SYMBOL --</option>' + opts;
+      filterStock.innerHTML = '<option value="">ALL SYMBOLS</option>' + opts;
+
+      render(allTrades);
+    }
+
+    function render(trades) {
+      document.getElementById('meta').textContent = trades.length + ' RECORDS';
+      if (!trades.length) {
+        document.getElementById('list').innerHTML = '<div class="empty">NO TRADES MATCHING FILTER</div>';
+        return;
+      }
+      let html = '<table><thead><tr><th>DATE</th><th>SYMBOL</th><th>ACTION</th><th>SHARES</th><th>PRICE</th><th>FEE</th><th>AMOUNT</th><th>NOTE</th></tr></thead><tbody>';
+      for (const t of trades) {
+        const cls = t.action === 'buy' ? 'tag-buy' : t.action === 'sell' ? 'tag-sell' : 'tag-div';
+        const label = t.action === 'buy' ? 'BUY' : t.action === 'sell' ? 'SELL' : 'DIV';
+        const sym = t.currency === 'USD' ? '$' : 'NT$';
+        const amount = Number(t.shares) * Number(t.price) + Number(t.fee || 0);
+        html += `<tr>
+          <td>${t.trade_date}</td>
+          <td><strong>${t.symbol || ''}</strong> ${t.name || ''}</td>
+          <td><span class="tag ${cls}">${label}</span></td>
+          <td>${Number(t.shares).toLocaleString()}</td>
+          <td>${sym}${Number(t.price).toLocaleString()}</td>
+          <td>${sym}${Number(t.fee || 0).toLocaleString()}</td>
+          <td>${sym}${Math.round(amount).toLocaleString()}</td>
+          <td>${t.note || '-'}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+      document.getElementById('list').innerHTML = html;
+    }
+
+    function applyFilter() {
+      const stockId = document.getElementById('filter-stock').value;
+      const action = document.getElementById('filter-action').value;
+      let filtered = allTrades;
+      if (stockId) filtered = filtered.filter(t => String(t.stock_id) === stockId);
+      if (action) filtered = filtered.filter(t => t.action === action);
+      render(filtered);
+    }
+
+    document.getElementById('filter-stock').addEventListener('change', applyFilter);
+    document.getElementById('filter-action').addEventListener('change', applyFilter);
+
+    async function addTrade(e) {
+      e.preventDefault();
+      const data = {
+        stock_id: parseInt(document.getElementById('stock_id').value),
+        trade_date: document.getElementById('trade_date').value,
+        action: document.getElementById('action').value,
+        shares: parseFloat(document.getElementById('shares').value),
+        price: parseFloat(document.getElementById('price').value),
+        fee: parseFloat(document.getElementById('fee').value) || 0,
+        currency: document.getElementById('currency').value,
+        note: document.getElementById('note').value || null
+      };
+      const res = await fetch('/api/trades', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+      });
+      const msg = document.getElementById('msg');
+      if (res.ok) {
+        msg.className = 'msg msg-ok';
+        msg.textContent = '> TRADE EXECUTED SUCCESSFULLY';
+        e.target.reset();
+        document.getElementById('trade_date').value = new Date().toISOString().slice(0,10);
+        await load();
+      } else {
+        const err = await res.json();
+        msg.className = 'msg msg-err';
+        msg.textContent = '> ERROR: ' + (err.detail || res.statusText);
+      }
+      setTimeout(() => { msg.style.display = 'none'; }, 3000);
+    }
+
+    load();
+  </script>
+</body>
+</html>

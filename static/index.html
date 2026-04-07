@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GOLDMAN TERMINAL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/static/terminal.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <i data-lucide="activity"></i>
+      <span class="brand-name">GOLDMAN<span class="accent">TERMINAL</span></span>
+      <span class="status-pill">TIM'S COMMAND CENTER</span>
+    </div>
+    <div class="topbar-right">
+      <span class="lang"><i data-lucide="languages"></i> 中</span>
+      <span class="live-dot"></span>
+      <span class="live-text">即時連線</span>
+    </div>
+  </header>
+
+  <div class="ticker-bar" id="ticker-bar">
+    <div class="ticker-track" id="ticker-track">
+      <span class="ticker-loading">載入即時數據中...</span>
+    </div>
+  </div>
+
+  <nav class="sidebar">
+    <a href="/" class="nav-item active">
+      <i data-lucide="layout-dashboard"></i>
+      <span>首頁</span>
+    </a>
+    <a href="/dashboard" class="nav-item">
+      <i data-lucide="bar-chart-3"></i>
+      <span>儀表板</span>
+    </a>
+    <a href="/positions" class="nav-item">
+      <i data-lucide="briefcase"></i>
+      <span>持股</span>
+    </a>
+    <a href="/trades" class="nav-item">
+      <i data-lucide="repeat-2"></i>
+      <span>交易</span>
+    </a>
+    <a href="/stocks" class="nav-item">
+      <i data-lucide="building-2"></i>
+      <span>股票</span>
+    </a>
+  </nav>
+
+  <main class="main-content">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">[ MISSION OBJECTIVE ]</span>
+        <span class="panel-meta">CLASSIFIED · TIM</span>
+      </div>
+      <div class="panel-body">
+        <div class="objective-grid">
+          <div class="obj-block">
+            <div class="obj-label">TARGET YEAR</div>
+            <div class="obj-value">2031</div>
+          </div>
+          <div class="obj-block">
+            <div class="obj-label">PASSIVE INCOME GOAL</div>
+            <div class="obj-value accent">NT$200,000</div>
+          </div>
+          <div class="obj-block">
+            <div class="obj-label">MONTHLY DCA</div>
+            <div class="obj-value">NT$25,000</div>
+          </div>
+          <div class="obj-block">
+            <div class="obj-label">DOCTRINE</div>
+            <div class="obj-value tiny">有題材攻 · 沒題材守</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">[ NAV STATUS ]</span>
+          <span class="panel-meta" id="nav-time">--</span>
+        </div>
+        <div class="panel-body">
+          <div class="big-stat" id="nav-value">--</div>
+          <div class="stat-sub">
+            <span class="label">CASH</span>
+            <span class="value" id="cash-value">--</span>
+          </div>
+          <div class="stat-sub">
+            <span class="label">EQUITY COST</span>
+            <span class="value" id="equity-value">--</span>
+          </div>
+          <div class="stat-sub">
+            <span class="label">POSITIONS</span>
+            <span class="value" id="pos-count">--</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">[ QUICK ACTIONS ]</span>
+        </div>
+        <div class="panel-body">
+          <a href="/trades" class="action-btn">
+            <i data-lucide="plus-circle"></i>
+            <span>NEW TRADE</span>
+          </a>
+          <a href="/positions" class="action-btn">
+            <i data-lucide="eye"></i>
+            <span>VIEW POSITIONS</span>
+          </a>
+          <a href="/stocks" class="action-btn">
+            <i data-lucide="search"></i>
+            <span>STOCK REGISTRY</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">[ INTEL FEED ]</span>
+        <span class="panel-meta">LIVE · GOLDMAN ANALYSIS</span>
+      </div>
+      <div class="panel-body intel-feed">
+        <div class="intel-item">
+          <i data-lucide="alert-triangle" class="intel-icon warn"></i>
+          <div class="intel-text">
+            <div class="intel-title">伊朗升級信號 · GDX 持倉中</div>
+            <div class="intel-meta">原物料 · MEDIUM RISK · 目標 $106-110</div>
+          </div>
+        </div>
+        <div class="intel-item">
+          <i data-lucide="trending-up" class="intel-icon ok"></i>
+          <div class="intel-text">
+            <div class="intel-title">月存股完成 · 凱基金 + 中信金</div>
+            <div class="intel-meta">紀律執行 · 4月份 · NT$24,071</div>
+          </div>
+        </div>
+        <div class="intel-item">
+          <i data-lucide="info" class="intel-icon info"></i>
+          <div class="intel-text">
+            <div class="intel-title">聯電 +9% 暫不追擊</div>
+            <div class="intel-meta">等待 55-56 回測買點</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span>GOLDMAN TERMINAL v1.0 · CLASSIFIED · INTERNAL USE ONLY</span>
+    <span id="footer-time">--</span>
+  </footer>
+
+  <script src="/static/terminal.js"></script>
+</body>
+</html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>POSITIONS · GOLDMAN TERMINAL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/static/terminal.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <i data-lucide="activity"></i>
+      <span class="brand-name">GOLDMAN<span class="accent">TERMINAL</span></span>
+      <span class="status-pill">POSITIONS</span>
+    </div>
+    <div class="topbar-right">
+      <span class="lang"><i data-lucide="languages"></i> 中</span>
+      <span class="live-dot"></span>
+      <span class="live-text">即時連線</span>
+    </div>
+  </header>
+
+  <div class="ticker-bar">
+    <div class="ticker-track" id="ticker-track">
+      <span class="ticker-loading">載入即時數據中...</span>
+    </div>
+  </div>
+
+  <nav class="sidebar">
+    <a href="/" class="nav-item"><i data-lucide="layout-dashboard"></i><span>首頁</span></a>
+    <a href="/dashboard" class="nav-item"><i data-lucide="bar-chart-3"></i><span>儀表板</span></a>
+    <a href="/positions" class="nav-item active"><i data-lucide="briefcase"></i><span>持股</span></a>
+    <a href="/trades" class="nav-item"><i data-lucide="repeat-2"></i><span>交易</span></a>
+    <a href="/stocks" class="nav-item"><i data-lucide="building-2"></i><span>股票</span></a>
+  </nav>
+
+  <main class="main-content">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">[ ACTIVE POSITIONS ]</span>
+        <span class="panel-meta" id="meta">--</span>
+      </div>
+      <div class="panel-body">
+        <div id="list"><div class="empty">LOADING...</div></div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span>GOLDMAN TERMINAL v1.0 · CLASSIFIED</span>
+    <span id="footer-time">--</span>
+  </footer>
+
+  <script src="/static/terminal.js"></script>
+  <script>
+    async function load() {
+      const res = await fetch('/api/positions');
+      const positions = await res.json();
+      document.getElementById('meta').textContent = positions.length + ' SYMBOLS';
+
+      if (!positions.length) {
+        document.getElementById('list').innerHTML = '<div class="empty">NO ACTIVE POSITIONS — START BY ADDING STOCKS AND TRADES</div>';
+        return;
+      }
+
+      let totalCost = 0;
+      let html = '<table><thead><tr><th>SYMBOL</th><th>NAME</th><th>MKT</th><th>SECTOR</th><th>SHARES</th><th>AVG COST</th><th>COST BASIS</th></tr></thead><tbody>';
+      for (const p of positions) {
+        const tagCls = p.market === 'TW' ? 'tag-tw' : 'tag-us';
+        const sym = p.currency === 'USD' ? '$' : 'NT$';
+        if (p.currency !== 'USD') totalCost += Number(p.cost_basis);
+        html += `<tr>
+          <td><strong>${p.symbol}</strong></td>
+          <td>${p.name}</td>
+          <td><span class="tag ${tagCls}">${p.market}</span></td>
+          <td>${p.sector || '-'}</td>
+          <td>${Number(p.shares).toLocaleString()}</td>
+          <td>${sym}${Number(p.avg_cost).toLocaleString()}</td>
+          <td>${sym}${Number(p.cost_basis).toLocaleString()}</td>
+        </tr>`;
+      }
+      html += `<tr class="total-row">
+        <td colspan="6">TOTAL COST (TWD ONLY)</td>
+        <td>NT$ ${Math.round(totalCost).toLocaleString()}</td>
+      </tr></tbody></table>`;
+      document.getElementById('list').innerHTML = html;
+
+      if (window.lucide) lucide.createIcons();
+    }
+
+    load();
+  </script>
+</body>
+</html>
