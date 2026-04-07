@@ -673,7 +673,7 @@ button.secondary:hover {
 }
 .val-cell.span2 { grid-column: span 2; }
 .vc-label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
-.vc-val { font-size: 16px; font-weight: 600; font-family: var(--font-display); }
+.vc-val { font-size: 22px !important; font-weight: 700 !important; font-family: var(--font-display) !important; letter-spacing: 0.02em; }
 .vc-val.accent { color: var(--accent); }
 .vc-val.green { color: var(--green); }
 .vc-val.blue { color: var(--blue); }
@@ -691,7 +691,8 @@ button.secondary:hover {
 .inst-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); color: var(--text-primary); }
 .inst-table tr:last-child td { border-bottom: none; }
 .inst-table tr:hover td { background: rgba(240,192,64,0.04); }
-.bar-wrap { display: inline-block; width: 40px; height: 3px; background: var(--border); margin-left: 4px; vertical-align: middle; }
+.bar-wrap { display: inline-block; width: 60px; height: 5px; background: var(--border); margin-left: 6px; vertical-align: middle; border-radius: 2px; overflow: hidden; }
+.bar-fill { display: block; height: 100%; border-radius: 2px; }
 .bar-fill { display: block; height: 100%; }
 .bar-fill.green { background: var(--green); }
 .bar-fill.red { background: var(--red); }
@@ -704,7 +705,7 @@ button.secondary:hover {
 .rev-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
 .rev-table tr:last-child td { border-bottom: none; }
 .rev-table tr:hover td { background: rgba(240,192,64,0.04); }
-.sparkline-wrap { display: flex; align-items: center; padding: 0 0.5rem; }
+.sparkline-wrap { display: flex; align-items: center; padding: 0.5rem; min-width: 170px; }
 .sparkline { display: block; }
 
 /* Industry allocation */
@@ -721,19 +722,25 @@ button.secondary:hover {
 .ai-panel { border-color: var(--accent); }
 .ai-buttons { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
 .btn {
-  background: var(--bg-deeper);
-  border: 1px solid var(--border-bright);
-  color: var(--text-primary);
+  background: rgba(245, 204, 48, 0.12);
+  border: 1px solid var(--accent);
+  color: var(--accent);
   font-family: var(--font-mono);
   font-size: 12px;
-  padding: 0.4rem 0.8rem;
+  padding: 0.5rem 1rem;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  transition: border-color 0.2s;
+  gap: 0.5rem;
+  transition: all 0.15s;
+  letter-spacing: 0.05em;
 }
-.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn:hover {
+  background: rgba(245, 204, 48, 0.25);
+  box-shadow: 0 0 10px rgba(245, 204, 48, 0.2);
+}
+.inst-table .green { color: var(--green) !important; }
+.inst-table .red { color: var(--red) !important; }
 .btn i { width: 14px; height: 14px; }
 .ai-preview { max-height: 300px; overflow-y: auto; }
 .ai-text {

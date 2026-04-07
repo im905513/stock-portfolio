@@ -1,309 +1,188 @@
-# FUNDAMENTALS 頁面 UI/UX 重新規劃
+# MiniMax 修改指令 — fundamentals.html 視覺修正
 
-> Goldman Terminal v2 · Fundamentals Page Redesign Spec  
-> 設計基準：Bloomberg Terminal 美學 · 資訊密度優先 · 為 AI 分析輔助設計
-
----
-
-## 一、現況問題診斷
-
-| 區塊 | 問題 |
-|------|------|
-| Valuation | 只有 3 個數字，空白太多，整個 card 浪費空間 |
-| 三大法人買超 | 日期全部相同（2026-04-07），數值全為 0，資料抓取失敗卻沒有 fallback 提示 |
-| 月營收趨勢 | 月增率正負沒有視覺區分，缺乏走勢圖 |
-| Industry Allocation | 分佈條紋花紋無法直覺判斷比例，顏色沒有語意 |
-| 整體佈局 | 三欄 top + 一欄 bottom，垂直層次感弱，大量留白浪費螢幕 |
-| 股票選擇器 | 全寬 dropdown 太笨重，切換後無動畫 |
+以下是針對 `static/fundamentals.html` 的精確修改指令。
+CSS（terminal.css）不需要動，所有 class 已存在，只需要修正 HTML 裡的 JS 渲染邏輯。
 
 ---
 
-## 二、設計方向
+## 問題 1：Industry Allocation — bar 用文字字元而非 CSS div
 
-### 核心原則
-- **信息密度 ↑**：Bloomberg style，每個像素都有意義
-- **狀態清晰**：數字好壞一眼看出（綠漲紅跌，amber 警示）
-- **資料誠實**：抓取失敗要明確顯示 `NO DATA`，不顯示假 0
-- **AI 友好**：頁面底部加入「複製 AI 分析摘要」按鈕
+**位置**：`loadAllocation()` function 內
 
-### 色彩語意（沿用 terminal.css 變數）
+**現在的錯誤寫法**：
+```javascript
+const bar = '█'.repeat(Math.round(w/2)) + '░'.repeat(50 - Math.round(w/2));
+barsHtml += `<div class="alloc-row">
+  <span class="alloc-sector" style="color:${color}">${r.sector}</span>
+  ...
+```
+
+**改成**（移除 `bar` 變數，`.alloc-bar-wrap` 改用 CSS div）：
+```javascript
+barsHtml += `<div class="alloc-row">
+  <span class="alloc-sector" style="color:${color}">${r.sector}</span>
+  <div class="alloc-bar-wrap">
+    <div class="alloc-bar-fill" style="width:${w}%;background:${color}"></div>
+  </div>
+  <span class="alloc-pct">${r.pct}%</span>
+  <span class="alloc-cost">NT$${r.cost.toLocaleString()}</span>
+  <span class="alloc-count">${r.stock_count}檔</span>
+</div>`;
+```
+
+---
+
+## 問題 2：Valuation — 數字字體太小，沒用到 font-display
+
+**位置**：`loadValuation()` 裡 innerHTML 那段
+
+**現在的寫法**：
+```html
+<span class="vc-val accent">${per}</span>
+```
+
+`.vc-val` 的 CSS 已有 `font-size: 16px; font-family: var(--font-display)`，但數字看起來仍小。
+請在 HTML 的 `<style>` 區塊內（或在 terminal.css 的 `/* ─── Fundamentals v2 ─── */` 段落後面）加入：
+
 ```css
---bg:        #080910   /* 主背景 */
---panel:     #0d0f1a   /* Card 背景 */
---border:    #1e2235   /* 邊框 */
---gold:      #f0c040   /* 主強調、標題 */
---text:      #c8cfe0   /* 主文字 */
---dim:       #4a5170   /* 次要文字 */
---green:     #3ddc97   /* 正值、買超 */
---red:       #ff4f5e   /* 負值、賣超 */
---amber:     #ffaa33   /* 警示、中性 */
+.vc-val {
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  font-family: var(--font-display) !important;
+  letter-spacing: 0.02em;
+}
 ```
 
 ---
 
-## 三、頁面佈局重構
+## 問題 3：Institutional table — bar-wrap 寬度太窄看不清楚
 
-### 3.1 整體結構（上中下三層）
+**位置**：terminal.css 的 `.bar-wrap`
 
+**現在**：
+```css
+.bar-wrap { display: inline-block; width: 40px; height: 3px; ... }
 ```
-┌─────────────────────────────────────────────────────────┐
-│  HEADER BAR：股票選擇器 + 基本資訊 + 快速指標           │
-├──────────────┬──────────────┬──────────────────────────┤
-│  VALUATION   │  法人動向    │  月營收走勢圖             │
-│  深度版      │  含圖表      │  （sparkline）            │
-├──────────────┴──────────────┴──────────────────────────┤
-│  INDUSTRY ALLOCATION（橫向進度條，重新設計）            │
-├─────────────────────────────────────────────────────────┤
-│  AI EXPORT BAR（快速匯出摘要給 AI）                     │
-└─────────────────────────────────────────────────────────┘
+
+**改成**：
+```css
+.bar-wrap { display: inline-block; width: 60px; height: 5px; background: var(--border); margin-left: 6px; vertical-align: middle; border-radius: 2px; }
+.bar-fill { display: block; height: 100%; border-radius: 2px; }
 ```
 
 ---
 
-## 四、各區塊詳細規格
+## 問題 4：法人買超 — 正值加綠色 + 號，負值加紅色
 
-### 4.1 HEADER BAR（重構）
+**位置**：`loadInst()` 的 `fmt` function
 
-**現況**：股票選擇器獨佔一行，股票代號和名稱分散  
-**改為**：緊湊的單列 header，左右分工
-
-```
-[ SELECT ]  [TW] 2330 台積電 ▾     台積電 · 半導體 · TW     NT$785.00  ▲+2.3%  |  上次更新 14:35
+**現在**：
+```javascript
+const fmt = n => n > 0 ? `<span class="green">+${n.toLocaleString()}</span>` : ...
 ```
 
-- 股票選擇器縮短為 280px，不全寬
-- 右側即時顯示當日股價與漲跌幅（顏色語意）
-- 更新時間戳記靠右
+這個邏輯是對的，但 `.green` 和 `.red` class 在 inst-table 裡要確認有繼承顏色。
+在 terminal.css 加入：
 
----
-
-### 4.2 VALUATION（大幅擴充）
-
-**現況**：只有 P/E、殖利率、P/B 三行文字  
-**改為**：2 欄 grid，6-8 個指標，加入評價燈號
-
-```
-[ VALUATION ]                              評價：FAIR VALUE ◉
-
-┌─────────────────────┬─────────────────────┐
-│  本益比  P/E        │  股價淨值比  P/B    │
-│  28.08              │  8.90               │
-│  ── 產業均值 22.4   │  ── 產業均值 6.2    │
-├─────────────────────┼─────────────────────┤
-│  殖利率             │  EPS（TTM）         │
-│  1.18%              │  NT$32.45           │
-│                     │                     │
-├─────────────────────┼─────────────────────┤
-│  市值               │  52週區間           │
-│  NT$20.4 兆         │  ████░░░░  785      │
-│                     │  Low 543  High 1080 │
-└─────────────────────┴─────────────────────┘
-```
-
-**評價燈號邏輯**：
-- 本益比 < 產業均值 → `UNDERVALUED` 綠色
-- 本益比 在均值 ±20% → `FAIR VALUE` 橘黃
-- 本益比 > 均值 20% → `OVERVALUED` 紅色
-
-**技術實作**：
-- 新增 `/api/stocks/{id}/valuation` endpoint
-- FinMind 抓 `TaiwanStockInfo`、`TaiwanStockPER`
-
----
-
-### 4.3 三大法人買超（修復 + 視覺化）
-
-**現況**：資料全為 0，沒有 fallback，純表格  
-**改為**：表格 + 迷你長條圖，加資料狀態提示
-
-```
-[ 三大法人買超 ]                 近5日    ⚠ 盤後資料，14:35 更新
-
-日期        外資           投信        自營商      合計
-04-01    +12,450  ████    +320       -180       +12,590
-04-02     -3,200  ██▌     +110       +220        -2,870
-04-03     +8,100  ████    -50        +440        +8,490
-04-04    +21,340  ████████ +890      +120       +22,350
-04-07    資料更新中...
-
-```
-
-**規則**：
-- 正值 → 綠色 + 向右長條
-- 負值 → 紅色 + 向左長條
-- 若 API 回傳空值 → 顯示 `[ NO DATA — 盤後 14:45 更新 ]`，不顯示 0
-
-**技術實作**：
-- FinMind `TaiwanStockInstitutionalInvestors` API
-- 加入 loading skeleton 和 error state
-
----
-
-### 4.4 月營收趨勢（加 Sparkline）
-
-**現況**：純表格，月增率正負無視覺差異  
-**改為**：表格 + 右側 sparkline 折線圖
-
-```
-[ 月營收趨勢 ]                   近6月
-
-        月份       營收              YoY      MoM
-      2025-10   NT$3,389.81 億     +18.2%    0.0%
-      2025-11   NT$3,674.73 億     +21.4%   +11.0%  ▲
-      2025-12   NT$3,436.14 億     +15.0%    -6.5%  ▼
-      2026-01   NT$3,350.04 億     +12.3%    -2.5%  ▼
-      2026-02   NT$4,012.55 億     +24.8%   +19.8%  ▲
-      2026-03   NT$3,176.57 億     +9.2%   -20.8%  ▼
-
-      [sparkline 折線圖]
-       4012 ┤    ╭╮
-       3674 ┤ ╭──╯╰──╮
-       3389 ┤─╯       ╰─
-            Oct Nov Dec Jan Feb Mar
-```
-
-**新增欄位**：
-- YoY（年增率）：需要去年同期資料
-- MoM 加箭頭 ▲▼，正值綠、負值紅
-- Sparkline 用 SVG 繪製，不需要 chart library
-
----
-
-### 4.5 INDUSTRY ALLOCATION（完整重設計）
-
-**現況**：花紋條紋難以判斷比例，無顏色語意  
-**改為**：水平進度條 + 各產業配色 + Donut Chart
-
-#### 左側：進度條列表
-```
-[ INDUSTRY ALLOCATION · BY COST ]
-
-半導體    ████████████████░░░░░░░░  39.2%   NT$40,040   1 檔
-金融      ████████████████░░░░░░░░  38.6%   NT$39,420   2 檔
-食品      █████████░░░░░░░░░░░░░░░  21.7%   NT$22,150   1 檔
-原物料    ░░░░░░░░░░░░░░░░░░░░░░░░   0.4%   NT$422      1 檔
-```
-
-#### 右側：Donut Chart（SVG）
-- 各產業固定配色（半導體 gold、金融 blue、食品 green、原物料 amber）
-- 中心顯示總成本
-
-**技術實作**：
-- Pure SVG donut，不需要 Chart.js
-- 顏色 map 定義在 `terminal.js`
-
----
-
-### 4.6 【新增】AI EXPORT BAR
-
-頁面最底部固定列，這是本次最重要的新增功能：
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  [ AI ANALYSIS ]  2330 台積電  · 快照時間 17:29        │
-│                                                         │
-│  [▣ 複製純文字摘要]  [⬇ 下載 JSON]  [⬇ 下載 Markdown] │
-└─────────────────────────────────────────────────────────┘
-```
-
-**複製純文字摘要**內容格式：
-```
-=== GOLDMAN TERMINAL · AI ANALYSIS EXPORT ===
-股票：2330 台積電（台灣半導體）
-快照時間：2026-04-07 17:29 GMT+8
-
-【估值】
-- 本益比 P/E：28.08（產業均值 22.4，溢價 25.5%）
-- 股價淨值比 P/B：8.90
-- 殖利率：1.18%
-- 52週區間：NT$543 ~ NT$1,080，現價 NT$785（區間位置 46%）
-
-【法人動向（近5日）】
-- 外資：合計 +38,690 張（4日買超）
-- 投信：合計 +1,270 張
-- 自營：合計 +600 張
-
-【月營收（近6月）】
-- 2026-03：NT$3,176.57 億（MoM -20.8%，YoY +9.2%）
-- 2026-02：NT$4,012.55 億（MoM +19.8%，YoY +24.8%）
-- 趨勢：近6月均值 NT$3,508 億
-
-【持股資訊】
-- 持有：1 張，均價 NT$850，成本 NT$850,000
-- 浮動損益：-NT$65,000（-7.6%）
-- 佔組合比例：39.2%
-
-【問我】
-請根據以上數據，評估此股票的：
-1. 現在估值是否合理？
-2. 法人動向對後市的暗示
-3. 月營收趨勢的隱憂或亮點
-4. 給持有者的具體建議
+```css
+.inst-table .green { color: var(--green) !important; }
+.inst-table .red   { color: var(--red)   !important; }
 ```
 
 ---
 
-## 五、互動細節規格
+## 問題 5：月營收趨勢 — Sparkline 太小
 
-### Loading States
-- 每個 card 獨立 loading skeleton（不要整頁 spinner）
-- Skeleton 用 `#1e2235` 底色 + shimmer animation
+**位置**：`buildSparkline()` function
 
-### Error States
-```
-[ NO DATA ]  API 回傳失敗 · 點此重試  ↻
+**現在**：
+```javascript
+const w = 120, h = 50, pad = 4;
 ```
 
-### 動畫
-- 數字更新：`countUp` 效果（0 → 最終值，300ms）
-- Card 載入：從下往上 fade-in，各 card 錯開 100ms delay
-- 長條圖：寬度從 0 展開，400ms ease-out
-
-### Hover
-- 表格行：hover 時 `background: rgba(240,192,64,0.05)`
-- 指標數字：hover 顯示 tooltip 說明定義
-
----
-
-## 六、新增 API Endpoints（後端）
-
-| Endpoint | 說明 | 資料來源 |
-|----------|------|---------|
-| `GET /api/stocks/{id}/valuation` | P/E、P/B、殖利率、EPS、52週區間 | FinMind |
-| `GET /api/stocks/{id}/institutional` | 三大法人近5日 | FinMind |
-| `GET /api/stocks/{id}/revenue` | 月營收近12月（含 YoY）| FinMind |
-| `GET /api/stocks/{id}/ai-export` | 整合所有資料，回傳純文字 + JSON | 內部整合 |
-
----
-
-## 七、實作優先順序
-
-| 優先級 | 項目 | 工時估計 |
-|--------|------|---------|
-| P0 | 修復三大法人資料抓取 + error state | 2h |
-| P0 | Valuation 擴充（加 52週區間、EPS） | 3h |
-| P1 | 月營收加 YoY + Sparkline | 3h |
-| P1 | Industry Allocation 改進度條 + Donut | 4h |
-| P1 | AI Export Bar | 3h |
-| P2 | Loading skeleton 動畫 | 2h |
-| P2 | Header Bar 緊湊化 | 1h |
-
-**建議開發順序**：先修 P0 資料問題 → AI Export Bar（對你最實用）→ 視覺優化
-
----
-
-## 八、檔案異動清單
-
+**改成**：
+```javascript
+const w = 160, h = 70, pad = 6;
 ```
-main.py              新增 4 個 API endpoints
-static/
-├── fundamentals.html   整體重構
-├── terminal.css        新增 .valuation-grid、.sparkline、
-│                       .progress-bar、.ai-export-bar 等 class
-└── terminal.js         新增 sparkline SVG 繪製、countUp、
-                        AI 摘要組裝與複製邏輯
+
+同時在 terminal.css 的 `.sparkline-wrap` 改成：
+```css
+.sparkline-wrap { display: flex; align-items: center; padding: 0.5rem; min-width: 170px; }
 ```
 
 ---
 
-*Goldman Terminal v2 · Fundamentals Redesign · 2026-04-07*
+## 問題 6：AI Panel — 按鈕改成金色填充樣式（更醒目）
+
+**位置**：terminal.css 的 `.btn`
+
+**現在**：
+```css
+.btn {
+  background: var(--bg-deeper);
+  border: 1px solid var(--border-bright);
+  color: var(--text-primary);
+  ...
+}
+```
+
+**改成**：
+```css
+.btn {
+  background: rgba(245, 204, 48, 0.12);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.15s;
+  letter-spacing: 0.05em;
+}
+.btn:hover {
+  background: rgba(245, 204, 48, 0.25);
+  box-shadow: 0 0 10px rgba(245, 204, 48, 0.2);
+}
+```
+
+---
+
+## 問題 7：Header bar — 加入股價漲跌幅顏色
+
+**位置**：`loadValuation()` 裡設定 `stock-price` 的地方
+
+在設定 `document.getElementById('stock-price').textContent = cur;` 之後，
+**加入**這段根據漲跌改色的邏輯：
+
+```javascript
+const priceEl = document.getElementById('stock-price');
+priceEl.textContent = cur;
+// 如果有當日漲跌資料
+if (d.change_pct !== undefined) {
+  priceEl.style.color = d.change_pct >= 0 ? 'var(--green)' : 'var(--red)';
+  const sign = d.change_pct >= 0 ? '+' : '';
+  priceEl.textContent = `${cur}  ${sign}${d.change_pct.toFixed(2)}%`;
+} else {
+  priceEl.style.color = 'var(--accent-bright)';
+}
+```
+
+---
+
+## 總結：改動清單
+
+| 檔案 | 位置 | 改動 |
+|------|------|------|
+| fundamentals.html | `loadAllocation()` | 移除文字 bar，改用 CSS div |
+| terminal.css | `.vc-val` | font-size 22px |
+| terminal.css | `.bar-wrap` / `.bar-fill` | 加寬加高加 border-radius |
+| terminal.css | `.inst-table .green/.red` | 新增 !important 色彩 |
+| fundamentals.html | `buildSparkline()` | w=160, h=70 |
+| terminal.css | `.sparkline-wrap` | min-width: 170px |
+| terminal.css | `.btn` / `.btn:hover` | 金色填充樣式 |
+| fundamentals.html | `loadValuation()` | 加漲跌幅顏色邏輯 |
+
+**注意：不要動 main.py、不要動其他頁面的 HTML。只改上面列出的部分。**

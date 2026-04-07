@@ -202,7 +202,9 @@
       }
       document.getElementById('val-badge').textContent = badge;
       document.getElementById('val-badge').className = `panel-meta ${badgeCls}`;
-      document.getElementById('stock-price').textContent = cur;
+      const priceEl = document.getElementById('stock-price');
+      priceEl.textContent = cur;
+      priceEl.style.color = 'var(--accent-bright)';
 
       // Position in 52w range
       let rangeBar = '';
@@ -302,7 +304,7 @@
 
   function buildSparkline(values) {
     if (!values || values.length < 2) return '';
-    const w = 120, h = 50, pad = 4;
+    const w = 160, h = 70, pad = 6;
     const min = Math.min(...values), max = Math.max(...values);
     const range = max - min || 1;
     const pts = values.map((v, i) => {
@@ -375,10 +377,8 @@
       data.forEach(r => {
         const color = SECTOR_COLORS[r.sector] || SECTOR_COLORS['其他'];
         const w = r.pct;
-        const bar = '█'.repeat(Math.round(w/2)) + '░'.repeat(50 - Math.round(w/2));
         barsHtml += `<div class="alloc-row">
           <span class="alloc-sector" style="color:${color}">${r.sector}</span>
-          <div class="alloc-bar-wrap"><div class="alloc-bar-fill" style="width:${w}%;background:${color}"></div></div>
           <span class="alloc-pct">${r.pct}%</span>
           <span class="alloc-cost">NT$${r.cost.toLocaleString()}</span>
           <span class="alloc-count">${r.stock_count}檔</span>
