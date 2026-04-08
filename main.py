@@ -1105,12 +1105,11 @@ def run_migrations():
             with open(path, "r", encoding="utf-8") as f:
                 sql = f.read()
             try:
-                db.executescript("BEGIN; " + sql + " ; COMMIT;")
-                db.execute("INSERT INTO schema_migrations(version) VALUES (?)", (version,))
+                db.executescript(sql)
+                db.execute("INSERT OR IGNORE INTO schema_migrations(version) VALUES (?)", (version,))
                 db.commit()
                 print(f"[migration] applied {fname}")
             except Exception as e:
-                db.execute("ROLLBACK")
                 print(f"[migration] FAILED {fname}: {e}")
                 raise
 
