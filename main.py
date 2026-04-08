@@ -3,7 +3,7 @@ Tim 股票投資系統 - FastAPI 後端
 """
 import sqlite3, os, urllib.request, json
 from datetime import datetime, date, timedelta
-from typing import Optional
+from typing import Optional, Literal
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
@@ -121,24 +121,24 @@ def init_db():
 class StockIn(BaseModel):
     symbol: str
     name: str
-    market: str
+    market: Literal["TW", "US"]
     sector: Optional[str] = None
-    currency: str = "TWD"
-    investment_style: Optional[str] = "dca"
+    currency: Literal["TWD", "USD"] = "TWD"
+    investment_style: Literal["dca", "thematic", "trade"] = "dca"
 
 class TradeIn(BaseModel):
     stock_id: int
-    trade_date: str
-    action: str
+    trade_date: date
+    action: Literal["buy", "sell", "dividend"]
     shares: float
     price: float
     fee: float = 0
-    currency: str = "TWD"
+    currency: Literal["TWD", "USD"] = "TWD"
     note: Optional[str] = None
 
 class CashIn(BaseModel):
-    date: str
-    action: str
+    date: date
+    action: Literal["deposit", "withdraw", "stock_purchase", "stock_sell"]
     amount: float
     note: Optional[str] = None
 
@@ -838,19 +838,52 @@ def positions_page(): return _no_cache_response(f"{STATIC_DIR}/positions.html")
 # ─── Ticker ───────────────────────────────────────────────
 @app.get("/api/ticker")
 def ticker_data():
-    """跑馬燈用：台股加權指數 + 主要個股 TWSE 即時報價"""
-    symbols = ["2330", "2883", "2891", "2303"]
-    data = fetch_twse_batch(symbols)
+    """跑馬燈：從使用者實際持股取市值最大的 TW+US 個股（自動更新）"""
+    with get_db() as db:
+        rows = db.execute("""
+            SELECT s.symbol, s.name, s.currency,
+                   COALESCE(SUM(CASE WHEN t.action='buy' THEN t.shares*t.price
+                                     WHEN t.action='sell' THEN -t.shares*t.price
+                                     ELSE 0 END), 0) AS cost_basis
+            FROM stocks s
+            LEFT JOIN trades t ON s.id = t.stock_id
+            GROUP BY s.id
+            HAVING COALESCE(SUM(CASE WHEN t.action='buy' THEN t.shares
+                                     WHEN t.action='sell' THEN -t.shares
+                                     ELSE 0 END), 0) > 0
+            ORDER BY cost_basis DESC
+            LIMIT 8
+        """).fetchall()
+
+    tw_syms = [r["symbol"] for r in rows if r["currency"] != "USD"]
+    us_syms = [r["symbol"] for r in rows if r["currency"] == "USD"]
+
+    name_map = {r["symbol"]: r["name"] for r in rows}
+
     result = []
-    for sym, d in data.items():
-        price = d.get("price") or 0
-        pct = d.get("change_pct") or 0
+    if tw_syms:
+        tw_data = fetch_twse_batch(tw_syms)
+        for sym in tw_syms:
+            d = tw_data.get(sym)
+            if not d:
+                continue
+            result.append({
+                "symbol": sym,
+                "name": d.get("name") or name_map.get(sym, sym),
+                "price": d.get("price") or 0,
+                "change": d.get("change"),
+                "change_pct": d.get("change_pct") or 0,
+            })
+    for sym in us_syms:
+        d = fetch_us_quote(sym)
+        if "error" in d or not d.get("price"):
+            continue
         result.append({
             "symbol": sym,
-            "name": d.get("name", sym),
-            "price": price,
-            "change_pct": pct,
+            "name": name_map.get(sym, sym),
+            "price": d.get("price") or 0,
             "change": d.get("change"),
+            "change_pct": d.get("change_pct") or 0,
         })
     return result
 

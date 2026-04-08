@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Initialize Tim's portfolio data into stock.db"""
-import sqlite3
+import sqlite3, os
 
-DATABASE = "/home/ubuntu/stock-portfolio/stock.db"
+_BASE = os.path.dirname(os.path.abspath(__file__))
+DATABASE = os.getenv("DB_PATH", os.path.join(_BASE, "stock.db"))
 
 def seed():
     conn = sqlite3.connect(DATABASE)

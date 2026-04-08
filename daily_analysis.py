@@ -7,7 +7,8 @@ Goldman Terminal — Daily AI Portfolio Analysis
 import sqlite3, urllib.request, json, sys, os, subprocess
 from datetime import date, datetime
 
-DATABASE = "/home/openclaw/soldman-agent/stock.db"  # 備份用，不影響主程式
+_BASE = os.path.dirname(os.path.abspath(__file__))
+DATABASE = os.getenv("DB_PATH", os.path.join(_BASE, "stock.db"))
 API_BASE = "http://192.168.88.174:8000"
 
 def fetch_json(path):

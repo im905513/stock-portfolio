@@ -3,10 +3,11 @@
 Tim 股票系統 — 盤後股價更新腳本
 抓取收盤價 → 存入 stock_prices 表 → 吐出 NAV 摘要
 """
-import sqlite3, urllib.request, json, sys
+import sqlite3, urllib.request, json, sys, os
 from datetime import date, datetime
 
-DATABASE = "/home/ubuntu/stock-portfolio/stock.db"
+_BASE = os.path.dirname(os.path.abspath(__file__))
+DATABASE = os.getenv("DB_PATH", os.path.join(_BASE, "stock.db"))
 FINMIND_TOKEN = ""  # 留空用 public token
 TaiwanStocks = ["2330","2883","2891","1229"]  # 聯電、凱基、中信、聯華
 USStocks = ["GDX"]  # 金礦 ETF

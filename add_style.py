@@ -1,5 +1,6 @@
-import sqlite3
-conn = sqlite3.connect('/home/ubuntu/stock-portfolio/stock.db')
+import sqlite3, os
+_BASE = os.path.dirname(os.path.abspath(__file__))
+conn = sqlite3.connect(os.getenv("DB_PATH", os.path.join(_BASE, "stock.db")))
 cur = conn.cursor()
 
 # Add investment_style column
