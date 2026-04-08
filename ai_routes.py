@@ -10,6 +10,8 @@
 import os
 import math
 import statistics
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date as _date, datetime as _dt, timedelta
 from typing import Optional
 
@@ -592,15 +594,28 @@ def ai_journal(t: ThesisIn):
 #
 # 缺資料時不直接歸零，會降權 (回傳 score 仍可用)。
 
-# 預設候選池 — 第一版限縮在「適合 DCA 的產業」，避免暴衝小型股
+# 預設候選池 — 擴充到 FinMind 常見所有「相對穩定、適合 DCA」的產業分類
+# 對 FinMind industry_category 做 substring 比對 (大小寫不敏感)
 _DCA_INDUSTRY_KEYWORDS = (
-    "金融", "Financial", "Finance",
-    "食品", "Food",
-    "電子", "Semiconductor", "半導體",
-    "電信", "Telecom",
-    "公用", "Utilit",
-    "塑膠", "Plastic",
-    "鋼鐵", "Steel",
+    # 金融相關
+    "金融", "金控", "銀行", "保險", "證券", "Financial", "Finance", "Bank", "Insurance",
+    # 食品 / 民生
+    "食品", "Food", "貿易百貨", "百貨", "Retail",
+    # 科技 / 電子
+    "電子", "半導體", "Semiconductor", "電腦", "通信", "光電", "電機", "資訊服務",
+    # 電信 / 公用
+    "電信", "Telecom", "公用", "油電燃氣", "Utilit",
+    # 原物料 / 工業
+    "塑膠", "Plastic", "鋼鐵", "Steel", "水泥", "Cement", "紡織", "造紙", "玻璃", "化學", "化工",
+    # 運輸 / 觀光
+    "航運", "Shipping", "汽車", "Auto", "觀光", "Tourism",
+    # 生技 / 建材
+    "生技", "醫療", "Biotech", "Medical", "建材", "營造", "Construction",
+)
+
+# 明顯不適合 DCA 的標的 (ETF / 權證 / 特別股)
+_DCA_EXCLUDE_KEYWORDS = (
+    "ETF", "ETN", "權證", "特別股", "受益憑證", "存託憑證",
 )
 
 
@@ -690,18 +705,20 @@ def ai_discover(
     market: str = Query("TW", description="目前只支援 TW (FinMind)"),
     min_score: float = Query(0.5, ge=0, le=1),
     limit: int = Query(20, ge=1, le=50),
-    pool: int = Query(40, ge=5, le=200, description="候選池大小 (FinMind 抓取上限)"),
+    pool: int = Query(80, ge=5, le=200, description="候選池大小 (FinMind 抓取上限)"),
     exclude_held: bool = Query(True),
-    industry: Optional[str] = Query(None, description="只挑某產業 (子字串比對)"),
+    industry: Optional[str] = Query(None, description="產業過濾：指定關鍵字=子字串比對；'all'=跳過白名單掃全市場；留空=用預設 DCA 白名單"),
 ):
     """從 FinMind 全台股清單挖掘適合定期定額的候選，依 DCA score 排序回傳。
 
-    第一次跑可能 ~15-30s (FinMind rate limit)。結果 1h cache。
+    第一次跑可能 ~10-20s (併發 FinMind)。結果 1h cache。分層取樣避免單一產業吃掉 quota。
     """
     if market != "TW":
         raise HTTPException(400, "目前只支援 market=TW")
 
-    cache_key = f"ai_discover:{market}:{industry or 'all'}:{pool}"
+    industry_norm = (industry or "").strip()
+    cache_industry_tag = industry_norm.lower() or "whitelist"
+    cache_key = f"ai_discover:{market}:{cache_industry_tag}:{pool}"
     cached = _cache_get(cache_key)
     if cached is None:
         # 取全市場清單
@@ -710,27 +727,64 @@ def ai_discover(
         except Exception as e:
             raise HTTPException(503, f"FinMind TaiwanStockInfo 取得失敗: {e}")
 
-        # 過濾：產業關鍵字
+        scan_all = industry_norm.lower() == "all"
+
+        # 過濾：產業關鍵字 + 排除不適合 DCA 的標的
         def _match_industry(s):
             ind = s.get("industry") or ""
-            if industry:
-                return industry.lower() in ind.lower()
-            return any(k in ind for k in _DCA_INDUSTRY_KEYWORDS)
+            name = s.get("name") or ""
+            # 永遠排除 ETF / 權證 / 特別股
+            if any(k in name or k in ind for k in _DCA_EXCLUDE_KEYWORDS):
+                return False
+            if scan_all:
+                return bool(ind)  # 只保留有產業分類的
+            if industry_norm:
+                return industry_norm.lower() in ind.lower()
+            return any(k.lower() in ind.lower() for k in _DCA_INDUSTRY_KEYWORDS)
 
-        candidates_pool = [s for s in all_stocks if _match_industry(s)][:pool]
+        matched = [s for s in all_stocks if _match_industry(s)]
 
-        results = []
-        for s in candidates_pool:
+        # 分層取樣：依 industry_category 分組，每組取前 N 檔 (symbol 排序)
+        groups = defaultdict(list)
+        for s in matched:
+            groups[s.get("industry") or "Unknown"].append(s)
+        for k in groups:
+            groups[k].sort(key=lambda x: x.get("symbol") or "")
+
+        group_count = max(1, len(groups))
+        per_group = max(3, pool // group_count)
+        candidates_pool = []
+        for ind_name, items in groups.items():
+            candidates_pool.extend(items[:per_group])
+        # 若分層後超量，截到 pool；若不足，補其他剩餘股票
+        candidates_pool.sort(key=lambda x: x.get("symbol") or "")
+        if len(candidates_pool) > pool:
+            candidates_pool = candidates_pool[:pool]
+        elif len(candidates_pool) < pool:
+            seen = {c["symbol"] for c in candidates_pool}
+            for s in matched:
+                if s["symbol"] not in seen:
+                    candidates_pool.append(s)
+                    if len(candidates_pool) >= pool:
+                        break
+
+        # 併發抓指標
+        def _enrich(s):
             per, pbr, dy, has_rev = _fetch_dca_metrics(s["symbol"])
             score, reasons = _dca_score(per, pbr, dy, has_rev)
-            results.append({
+            return {
                 "symbol": s["symbol"],
                 "name": s["name"],
                 "industry": s["industry"],
                 "per": per, "pbr": pbr, "dividend_yield": dy,
                 "score": score,
                 "reasons": reasons,
-            })
+            }
+
+        results = []
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            for row in ex.map(_enrich, candidates_pool):
+                results.append(row)
         results.sort(key=lambda x: -x["score"])
         _cache_set(cache_key, results, 3600)
         cached = results
@@ -757,12 +811,17 @@ def ai_discover(
         if len(filtered) >= limit:
             break
 
+    breakdown = defaultdict(int)
+    for c in filtered:
+        breakdown[c.get("industry") or "Unknown"] += 1
+
     return {
         "snapshot_at": _dt.now().isoformat(),
         "market": market,
         "min_score": min_score,
         "pool_size": len(cached),
         "count": len(filtered),
+        "industry_breakdown": dict(breakdown),
         "candidates": filtered,
     }
 
