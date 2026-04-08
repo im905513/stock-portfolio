@@ -31,42 +31,49 @@ function updateNavTime() {
 updateNavTime();
 setInterval(updateNavTime, 30000);
 
-// ─── Ticker bar (mock for now, hook to FinMind/AlphaVantage later) ───
+// ─── Ticker bar ─── TWSE real-time + static fallback ───
 async function loadTicker() {
   const el = document.getElementById('ticker-track');
   if (!el) return;
 
-  // Static mock data for now (terminal is pretty + functional)
-  const tickers = [
-    { symbol: 'TWII', price: '21,450.32', change: '+1.2%', dir: 'up' },
-    { symbol: 'TSMC', price: '1,810', change: '-0.5%', dir: 'down' },
-    { symbol: 'GDX', price: '$93.82', change: '-0.8%', dir: 'down' },
-    { symbol: 'GOLD', price: '$4,799', change: '+0.4%', dir: 'up' },
-    { symbol: 'BRENT', price: '$87.42', change: '+1.1%', dir: 'up' },
-    { symbol: 'USDTWD', price: '31.45', change: '0.0%', dir: 'up' },
-    { symbol: 'BTC', price: '$66,820', change: '-2.1%', dir: 'down' },
-    { symbol: 'SP500', price: '5,653', change: '-0.3%', dir: 'down' },
-    { symbol: 'NASDAQ', price: '17,890', change: '-0.7%', dir: 'down' },
-    { symbol: '2891', price: '54.5', change: '+1.5%', dir: 'up' },
-    { symbol: '2883', price: '19.9', change: '+0.5%', dir: 'up' },
-    { symbol: '2303', price: '58.4', change: '+9.0%', dir: 'up' },
+  // Fallback static data (TWSE closed or API fail)
+  const fallback = [
+    { symbol: '2330', name: '台積電', price: 1860, change_pct: 0 },
+    { symbol: '2883', name: '凱基金', price: 21.5, change_pct: 0 },
+    { symbol: '2891', name: '中信金', price: 55.8, change_pct: 0 },
+    { symbol: 'GDX', name: 'Gold Miners', price: 94.97, change_pct: 1.23 },
   ];
 
-  const renderItems = (items) => items.map(t => `
-    <span class="ticker-item">
-      <span class="ticker-symbol">${t.symbol}</span>
-      <span class="ticker-price">${t.price}</span>
-      <span class="ticker-change ${t.dir}">${t.change}</span>
-    </span>
-  `).join('');
+  let tickers = fallback;
+  try {
+    const res = await fetch('/api/ticker');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.length > 0) {
+        tickers = data;
+      }
+    }
+  } catch (e) {
+    // Use fallback on network error
+  }
 
-  // Duplicate for seamless scroll
+  const renderItems = (items) => items.map(t => {
+    const pct = t.change_pct || 0;
+    const dir = pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
+    const sign = pct > 0 ? '+' : '';
+    const priceStr = t.price > 0 ? (Number.isInteger(t.price) ? t.price.toLocaleString() : t.price.toFixed(2)) : '—';
+    return `<span class="ticker-item">
+      <span class="ticker-symbol">${t.symbol}</span>
+      <span class="ticker-price">${priceStr}</span>
+      <span class="ticker-change ${dir}">${sign}${pct.toFixed(2)}%</span>
+    </span>`;
+  }).join('');
+
   el.innerHTML = renderItems(tickers) + renderItems(tickers);
 }
 
 loadTicker();
-
-// ─── NAV stats (homepage) ───
+setInterval(loadTicker, 30000);
 async function loadNavStats() {
   const navEl = document.getElementById('nav-value');
   if (!navEl) return;

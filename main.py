@@ -9,12 +9,24 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from contextlib import contextmanager
+import os
 
 DATABASE = "/home/ubuntu/stock-portfolio/stock.db"
 STATIC_DIR = "/home/ubuntu/stock-portfolio/static"
+ALPHA_KEY = os.getenv("ALPHA_VANTAGE_KEY", "")
+FINMIND_TOKEN = os.getenv("FINMIND_TOKEN", "")
 
 app = FastAPI(title="Tim Stock Portfolio")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+@app.middleware("http")
+async def no_cache_middleware(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/") or request.url.path in ("/", "/dashboard", "/positions", "/trades", "/stocks", "/fundamentals"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
 
 # ─── DB helpers ───────────────────────────────────────────
 
@@ -263,9 +275,201 @@ def industry_allocation():
 # ─── Feature 5: Fundamentals ─────────────────────────────
 
 def fetch_finmind(dataset, symbol, start, end, token=""):
+    token = token or FINMIND_TOKEN
     url = f"https://api.finmindtrade.com/api/v4/data?dataset={dataset}&data_id={symbol}&start_date={start}&end_date={end}&token={token}"
     with urllib.request.urlopen(url, timeout=10) as r:
         return json.loads(r.read())
+
+def fetch_twse_realtime(symbol: str):
+    """TWSE 即時報價（台股， symbol如 2330）"""
+    import subprocess
+    try:
+        # 格式: ex_ch=tse_{symbol}.tw 或 otc_{symbol}.tw
+        url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{symbol}.tw&json=1&delay=0"
+        cmd = ["curl", "-s", "--max-time", "8", url]
+        raw = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8", errors="ignore")
+        data = json.loads(raw)
+        arr = data.get("msgArray", [])
+        if not arr:
+            return {"error": "無資料"}
+        r = arr[0]
+        price_str = r.get("z", "").strip()
+        price = float(price_str) if price_str and price_str != "-" else 0
+        y_str = r.get("y", "").strip()
+        y = float(y_str) if y_str and y_str != "-" else 0
+        chg = round(price - y, 2) if price and y else 0
+        chg_pct = round(chg / y * 100, 2) if y else 0
+        chg_str = r.get("p", "").strip()
+        return {
+            "symbol": r.get("c", symbol),
+            "name": r.get("n", ""),
+            "price": price,
+            "open": float(r.get("o", 0)) or 0,
+            "high": float(r.get("h", 0)) or 0,
+            "low": float(r.get("l", 0)) or 0,
+            "volume": int(r.get("v", 0)) or 0,
+            "change": chg,
+            "change_pct": chg_pct,
+            "change_str": chg_str,
+            "prev_close": y,
+            "time": r.get("t", ""),
+            "raw": r
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+def fetch_twse_batch(symbols: list):
+    """批次查 TWSE 多檔即時報價（一次一檔）"""
+    import subprocess
+    result = {}
+    for sym in symbols:
+        try:
+            url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{sym}.tw&json=1&delay=0"
+            cmd = ["curl", "-s", "--max-time", "5", url]
+            raw = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8", errors="ignore")
+            data = json.loads(raw)
+            arr = data.get("msgArray", [])
+            if not arr:
+                continue
+            r = arr[0]
+            sym_code = r.get("c", "").strip()
+            if not sym_code:
+                continue
+            price_str = r.get("z", "").strip()
+            y_str = r.get("y", "").strip()
+            y = float(y_str) if y_str and y_str != "-" else 0
+            # 盤中用現價，收盤後用收盤參考價
+            if price_str and price_str != "-":
+                price = float(price_str)
+            elif y:
+                price = y  # 收盤後用昨收當現價
+            else:
+                price = 0
+            chg = round(price - y, 2) if price and y else 0
+            chg_pct = round(chg / y * 100, 2) if y else 0
+            result[sym] = {
+                "price": price,
+                "change": chg,
+                "change_pct": chg_pct,
+                "open": float(r.get("o", 0)) or 0,
+                "high": float(r.get("h", 0)) or 0,
+                "low": float(r.get("l", 0)) or 0,
+                "volume": int(r.get("v", 0)) or 0,
+                "name": r.get("n", ""),
+                "time": r.get("t", ""),
+            }
+        except Exception:
+            continue
+    return result
+
+def fetch_alphavantage(symbol: str, key: str = ""):
+    """Alpha Vantage 美股即時報價"""
+    key = key or ALPHA_KEY
+    try:
+        url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={key}"
+        with urllib.request.urlopen(url, timeout=10) as r:
+            data = json.loads(r.read())
+        q = data.get("Global Quote", {})
+        if q:
+            return {
+                "symbol": symbol,
+                "price": float(q.get("05. price", 0)),
+                "change": float(q.get("09. change", 0)),
+                "change_pct": float(q.get("10. change percent", "0").replace("%","")),
+                "raw": q
+            }
+        return {"error": "無資料"}
+    except Exception as e:
+        return {"error": str(e)}
+
+# ─── 即時報價 API ────────────────────────────────────────
+@app.get("/api/positions/rt")
+def positions_with_realtime():
+    """持股 + 即時報價 + 損益計算（從 stocks + trades 即時計算）"""
+    with get_db() as db:
+        # 從 stocks + trades 即時計算持股
+        rows = db.execute("""
+            SELECT
+                s.id, s.symbol, s.name, s.market, s.sector, s.currency, s.investment_style,
+                COALESCE(SUM(CASE WHEN t.action='buy' THEN t.shares WHEN t.action='sell' THEN -t.shares ELSE t.shares END),0) AS shares,
+                COALESCE(SUM(CASE WHEN t.action='buy' THEN t.shares * t.price WHEN t.action='sell' THEN -t.shares * t.price ELSE 0 END),0) AS cost_basis
+            FROM stocks s
+            LEFT JOIN trades t ON s.id = t.stock_id AND t.action IN ('buy','sell')
+            GROUP BY s.id
+            HAVING shares > 0
+        """).fetchall()
+
+    positions = [dict(r) for r in rows]
+
+    tw_map = {p["symbol"]: p for p in positions if p["currency"] != "USD"}
+    us_map = {p["symbol"]: p for p in positions if p["currency"] == "USD"}
+
+    # 批次 TWSE 即時報價
+    if tw_map:
+        tw_result = fetch_twse_batch(list(tw_map.keys()))
+        for sym, d in tw_result.items():
+            tw_map[sym]["_rt"] = d
+
+    # Alpha Vantage 美股
+    for sym in us_map:
+        d = fetch_alphavantage(sym)
+        if "error" not in d:
+            us_map[sym]["_rt"] = d
+
+    all_data = {**tw_map, **us_map}
+    out = []
+    for p in positions:
+        sym = p["symbol"]
+        rt = all_data.get(sym, {}).get("_rt", {})
+        cur_price = rt.get("price", 0) or 0
+        shares = float(p["shares"])
+        cost_basis = float(p["cost_basis"]) or 0
+        avg_cost = (cost_basis / shares) if shares else 0
+        cur_value = cur_price * shares
+        pnl = cur_value - cost_basis
+        pnl_pct = round(pnl / cost_basis * 100, 2) if cost_basis else 0
+        out.append({
+            **p,
+            "shares": round(shares, 0),
+            "avg_cost": round(avg_cost, 2),
+            "cost_basis": round(cost_basis, 0),
+            "current_price": cur_price,
+            "current_value": round(cur_value, 0),
+            "pnl": round(pnl, 0),
+            "pnl_pct": pnl_pct,
+            "change": rt.get("change") if rt else None,
+            "change_pct": rt.get("change_pct") if rt else None,
+            "time": rt.get("time") if rt else None,
+        })
+    return out
+
+@app.get("/api/realtime/{symbol}")
+def realtime_quote(symbol: str):
+    """
+    統一即時報價端點
+    台股（4-6碼數字）→ TWSE
+    美股（字母）→ Alpha Vantage
+    """
+    if symbol.isdigit() and len(symbol) <= 6:
+        return fetch_twse_realtime(symbol)
+    return fetch_alphavantage(symbol)
+
+@app.get("/api/realtime/batch")
+def realtime_batch(symbols: str):
+    """
+    批次查詢即時報價
+    ?symbols=2330,2883,AMD,TSLA
+    """
+    results = []
+    for sym in symbols.split(","):
+        sym = sym.strip()
+        if not sym:
+            continue
+        if sym.isdigit() and len(sym) <= 6:
+            results.append(fetch_twse_realtime(sym))
+        else:
+            results.append(fetch_alphavantage(sym))
+    return results
 
 @app.get("/api/stocks/{stock_id}/valuation")
 def get_valuation(stock_id: int):
@@ -489,20 +693,46 @@ def get_fundamentals(stock_id: int):
 
 @app.get("/fundamentals")
 def fundamentals_page():
-    return FileResponse(f"{STATIC_DIR}/fundamentals.html")
+    return _no_cache_response(f"{STATIC_DIR}/fundamentals.html")
 
 # ─── Static pages ──────────────────────────────────────────
 
+def _no_cache_response(path):
+    r = FileResponse(path)
+    r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+    r.headers["Pragma"] = "no-cache"
+    r.headers["Expires"] = "0"
+    return r
+
 @app.get("/")
-def root(): return FileResponse(f"{STATIC_DIR}/index.html")
+def root(): return _no_cache_response(f"{STATIC_DIR}/index.html")
 @app.get("/dashboard")
-def dashboard_page(): return FileResponse(f"{STATIC_DIR}/dashboard.html")
+def dashboard_page(): return _no_cache_response(f"{STATIC_DIR}/dashboard.html")
 @app.get("/stocks")
-def stocks_page(): return FileResponse(f"{STATIC_DIR}/stocks.html")
+def stocks_page(): return _no_cache_response(f"{STATIC_DIR}/stocks.html")
 @app.get("/trades")
-def trades_page(): return FileResponse(f"{STATIC_DIR}/trades.html")
+def trades_page(): return _no_cache_response(f"{STATIC_DIR}/trades.html")
 @app.get("/positions")
-def positions_page(): return FileResponse(f"{STATIC_DIR}/positions.html")
+def positions_page(): return _no_cache_response(f"{STATIC_DIR}/positions.html")
+
+# ─── Ticker ───────────────────────────────────────────────
+@app.get("/api/ticker")
+def ticker_data():
+    """跑馬燈用：台股加權指數 + 主要個股 TWSE 即時報價"""
+    symbols = ["2330", "2883", "2891", "2303"]
+    data = fetch_twse_batch(symbols)
+    result = []
+    for sym, d in data.items():
+        price = d.get("price") or 0
+        pct = d.get("change_pct") or 0
+        result.append({
+            "symbol": sym,
+            "name": d.get("name", sym),
+            "price": price,
+            "change_pct": pct,
+            "change": d.get("change"),
+        })
+    return result
 
 # ─── Init ─────────────────────────────────────────────────
 init_db()

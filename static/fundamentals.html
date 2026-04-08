@@ -3,143 +3,123 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FUNDAMENTALS · GOLDMAN TERMINAL</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <link rel="stylesheet" href="/static/terminal.css?v=1775557230">
+  <title>FUNDAMENTALS · GOLDMAN PORTFOLIO</title>
+  <link rel="stylesheet" href="/static/terminal.css?v=20260408">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <i data-lucide="activity"></i>
-      <span class="brand-name">GOLDMAN<span class="accent">TERMINAL</span></span>
-      <span class="status-pill">FUNDAMENTALS</span>
-    </div>
-    <div class="topbar-right">
-      <span class="live-dot"></span>
-      <span class="live-text">LIVE</span>
-    </div>
+
+  <header class="site-header">
+    <a href="/" class="header-brand">
+      <div class="logo-mark"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      <span class="logo-text">GOLDMAN<span>.</span></span>
+    </a>
+    <div class="header-right"><div class="live-indicator"><span class="live-dot"></span><span>LIVE</span></div></div>
   </header>
 
-  <nav class="sidebar">
-    <a href="/" class="nav-item"><i data-lucide="layout-dashboard"></i><span>首頁</span></a>
-    <a href="/dashboard" class="nav-item"><i data-lucide="bar-chart-3"></i><span>儀表板</span></a>
-    <a href="/positions" class="nav-item"><i data-lucide="briefcase"></i><span>持股</span></a>
-    <a href="/trades" class="nav-item"><i data-lucide="repeat-2"></i><span>交易</span></a>
-    <a href="/fundamentals" class="nav-item active"><i data-lucide="pie-chart"></i><span>產業/基本面</span></a>
-    <a href="/stocks" class="nav-item"><i data-lucide="building-2"></i><span>股票</span></a>
+  <div class="ticker-bar"><div class="ticker-track" id="ticker-track"><span class="ticker-loading">載入即時數據中...</span></div></div>
+
+  <nav class="pill-nav">
+    <a href="/" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>首頁</a>
+    <a href="/dashboard" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>儀表板</a>
+    <a href="/positions" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>持股</a>
+    <a href="/trades" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>交易</a>
+    <a href="/fundamentals" class="nav-link active"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>產業/基本面</a>
+    <a href="/stocks" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="9" y1="22" x2="9" y2="2"/><line x1="15" y1="22" x2="15" y2="2"/></svg>股票</a>
   </nav>
 
-  <main class="main-content">
+  <div class="page-wrapper">
 
-    <!-- ═══ HEADER BAR ═══ -->
-    <div class="panel" id="header-panel">
-      <div class="header-bar">
-        <div class="header-left">
-          <select id="stock-select" class="stock-picker">
-            <option value="">— 選擇股票 —</option>
-          </select>
-          <span class="stock-meta" id="stock-meta"></span>
-        </div>
-        <div class="header-right">
-          <span class="stock-price" id="stock-price">--</span>
-          <span class="update-time" id="update-time">--:--</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- ═══ TOP ROW: Valuation + Institutional + Sparkline ═══ -->
-    <div class="grid-3" style="gap:0.75rem">
-
-      <!-- VALUATION -->
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">[ VALUATION ]</span>
-          <span class="panel-meta" id="val-badge"></span>
-        </div>
-        <div class="panel-body no-pad">
-          <div class="val-grid" id="val-content">
-            <div class="skeleton-block" style="height:200px"></div>
+    <!-- Stock Header Bar -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-body" style="padding:12px 16px">
+        <div class="stock-header-bar">
+          <div style="display:flex;align-items:center;gap:12px;flex:1">
+            <select id="stock-select" class="stock-picker">
+              <option value="">— 選擇股票 —</option>
+            </select>
+            <span class="card-meta" id="stock-meta" style="color:var(--text-secondary)"></span>
           </div>
-        </div>
-      </div>
-
-      <!-- INSTITUTIONAL -->
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">[ 法人買賣超 ]</span>
-          <span class="panel-meta">近5日 · <span id="inst-note">讀取中</span></span>
-        </div>
-        <div class="panel-body no-pad">
-          <div class="inst-table-wrap" id="inst-content">
-            <div class="skeleton-block" style="height:200px"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- REVENUE SPARKLINE -->
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">[ 月營收趨勢 ]</span>
-          <span class="panel-meta">近6月</span>
-        </div>
-        <div class="panel-body no-pad">
-          <div id="rev-content">
-            <div class="skeleton-block" style="height:200px"></div>
+          <div style="display:flex;align-items:center;gap:16px">
+            <span class="stock-price-display" id="stock-price">--</span>
+            <span class="update-time" id="update-time">--:--</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- ═══ INDUSTRY ALLOCATION ═══ -->
-    <div class="panel">
-      <div class="panel-header">
-        <span class="panel-title">[ INDUSTRY ALLOCATION · BY COST ]</span>
+    <!-- Top Row: Valuation + Institutional + Revenue -->
+    <div class="grid-3" style="gap:16px;margin-bottom:16px">
+
+      <!-- Valuation -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">VALUATION</span><span class="card-meta" id="val-badge"></span></div>
+        <div class="card-body" style="padding:0">
+          <div class="val-grid" id="val-content"><div class="skeleton" style="height:220px;border-radius:0"></div></div>
+        </div>
       </div>
-      <div class="panel-body no-pad">
-        <div class="alloc-layout" id="alloc-content">
-          <div class="skeleton-block" style="height:100px"></div>
+
+      <!-- Institutional -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">法人買賣超</span><span class="card-meta">近5日 · <span id="inst-note">讀取中</span></span></div>
+        <div class="card-body" style="padding:0">
+          <div id="inst-content"><div class="skeleton" style="height:220px;border-radius:0"></div></div>
+        </div>
+      </div>
+
+      <!-- Revenue Sparkline -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">月營收趨勢</span><span class="card-meta">近6月</span></div>
+        <div class="card-body" style="padding:0">
+          <div id="rev-content"><div class="skeleton" style="height:220px;border-radius:0"></div></div>
         </div>
       </div>
     </div>
 
-    <!-- ═══ AI EXPORT BAR ═══ -->
-    <div class="panel ai-panel" id="ai-panel" style="display:none">
-      <div class="panel-header">
-        <span class="panel-title">[ AI ANALYSIS ]</span>
-        <span class="panel-meta" id="ai-meta"></span>
+    <!-- Industry Allocation -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><span class="card-title">INDUSTRY ALLOCATION · BY COST</span></div>
+      <div class="card-body" style="padding:0">
+        <div id="alloc-content"><div class="skeleton" style="height:100px;border-radius:0;margin:8px"></div></div>
       </div>
-      <div class="panel-body">
+    </div>
+
+    <!-- AI Export -->
+    <div class="card ai-panel" id="ai-panel" style="display:none">
+      <div class="card-header"><span class="card-title">AI ANALYSIS EXPORT</span><span class="card-meta" id="ai-meta"></span></div>
+      <div class="card-body">
         <div class="ai-buttons">
-          <button class="btn" id="btn-copy-text" onclick="copyText()">
-            <i data-lucide="copy"></i> 複製純文字摘要
+          <button class="btn-gold" id="btn-copy-text" onclick="copyText()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            複製純文字摘要
           </button>
-          <button class="btn" onclick="downloadJSON()">
-            <i data-lucide="download"></i> 下載 JSON
+          <button class="btn-gold" onclick="downloadJSON()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            下載 JSON
           </button>
-          <button class="btn" onclick="downloadMD()">
-            <i data-lucide="file-text"></i> 下載 Markdown
+          <button class="btn-gold" onclick="downloadMD()">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            下載 Markdown
           </button>
         </div>
         <div class="ai-preview" id="ai-preview"></div>
       </div>
     </div>
 
-  </main>
+  </div>
 
-  <footer class="footer">
-    <span>GOLDMAN TERMINAL v1.0 · CLASSIFIED</span>
-    <span id="footer-time">--</span>
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-brand"><div class="footer-name">GOLDMAN PORTFOLIO</div><div class="footer-desc">Tim's personal investment command center.</div></div>
+      <div class="footer-col"><h4>導航</h4><ul><li><a href="/">首頁</a></li><li><a href="/dashboard">儀表板</a></li><li><a href="/positions">持股</a></li></ul></div>
+      <div class="footer-col"><h4>分析</h4><ul><li><a href="/fundamentals">基本面</a></li><li><a href="/stocks">股票註冊</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><span>GOLDMAN PORTFOLIO v2.0</span><span id="footer-time">--</span></div>
   </footer>
 
-  <script src="/static/terminal.js?v=1775557230"></script>
+  <script src="/static/terminal.js?v=20260408"></script>
   <script>
   // ─── State ───
-  let stocks = [];
-  let currentId = null;
-  let aiData = null;
+  let stocks = [], currentId = null, aiData = null;
 
   // ─── Init ───
   async function init() {
@@ -154,6 +134,7 @@
     });
     sel.addEventListener('change', () => { if (sel.value) loadAll(sel.value); });
     loadAllocation();
+    document.getElementById('footer-time').textContent = new Date().toLocaleString('zh-TW');
     setInterval(() => { if (currentId) refreshVal(); }, 60000);
   }
 
@@ -169,9 +150,10 @@
   }
 
   function showSkeletons() {
-    document.getElementById('val-content').innerHTML = '<div class="skeleton-block" style="height:220px"></div>';
-    document.getElementById('inst-content').innerHTML = '<div class="skeleton-block" style="height:220px"></div>';
-    document.getElementById('rev-content').innerHTML = '<div class="skeleton-block" style="height:220px"></div>';
+    const sk = '<div class="skeleton" style="height:220px;border-radius:0"></div>';
+    document.getElementById('val-content').innerHTML = sk;
+    document.getElementById('inst-content').innerHTML = sk;
+    document.getElementById('rev-content').innerHTML = sk;
   }
 
   async function refreshVal() { if (currentId) await loadValuation(currentId, true); }
@@ -185,15 +167,13 @@
         if (!silent) document.getElementById('val-content').innerHTML = noData(d.error);
         return;
       }
-      const s = d.stock;
-      const cur = d.current_price ? `NT$${d.current_price.toLocaleString()}` : '--';
+      const cur = d.current_price ? `$${d.current_price.toLocaleString()}` : '--';
       const per = d.per ? d.per.toFixed(2) : '--';
       const pbr = d.pbr ? d.pbr.toFixed(2) : '--';
       const yld = d.dividend_yield ? `${(d.dividend_yield).toFixed(2)}%` : '--';
-      const lo52 = d.price_52w_low ? `NT$${d.price_52w_low}` : '--';
-      const hi52 = d.price_52w_high ? `NT$${d.price_52w_high}` : '--';
+      const lo52 = d.price_52w_low ? `$${d.price_52w_low}` : '--';
+      const hi52 = d.price_52w_high ? `$${d.price_52w_high}` : '--';
 
-      // Fair value badge
       let badge = '', badgeCls = '';
       if (d.per) {
         if (d.per < 15) { badge = 'UNDERVALUED ◉'; badgeCls = 'green'; }
@@ -201,19 +181,16 @@
         else { badge = 'OVERVALUED ◉'; badgeCls = 'red'; }
       }
       document.getElementById('val-badge').textContent = badge;
-      document.getElementById('val-badge').className = `panel-meta ${badgeCls}`;
-      const priceEl = document.getElementById('stock-price');
-      priceEl.textContent = cur;
-      priceEl.style.color = 'var(--accent-bright)';
+      document.getElementById('val-badge').className = `card-meta badge-pill ${badgeCls}`;
+      document.getElementById('stock-price').textContent = cur;
+      document.getElementById('stock-price').style.color = 'var(--brand)';
 
-      // Position in 52w range
-      let rangeBar = '';
-      let rangePct = '--';
+      let rangeBar = '', rangePct = '--';
       if (d.current_price && d.price_52w_low && d.price_52w_high) {
         const range = d.price_52w_high - d.price_52w_low;
         rangePct = range > 0 ? Math.round((d.current_price - d.price_52w_low) / range * 100) : 50;
         const w = Math.max(2, Math.min(98, rangePct));
-        rangeBar = `<div class="range-bar-wrap"><div class="range-bar"><div class="range-fill" style="width:${w}%"></div></div><span>${rangePct}%</span></div>`;
+        rangeBar = `<div class="range-wrap"><div class="range-bar"><div class="range-fill" style="width:${w}%"></div></div><span style="font-size:11px;color:var(--text-muted);margin-left:6px">${rangePct}%</span></div>`;
       }
 
       document.getElementById('val-content').innerHTML = `
@@ -244,7 +221,8 @@
         document.getElementById('inst-note').textContent = '無資料';
         return;
       }
-      document.getElementById('inst-note').textContent = '盤後 14:35 更新';
+      document.getElementById('inst-note').textContent = '盤後更新';
+      const maxAbs = Math.max(...d.data.map(x => Math.abs(x.foreign_net)));
       let html = `<table class="inst-table"><thead><tr><th>日期</th><th>外資</th><th>投信</th><th>自營商</th><th>合計</th></tr></thead><tbody>`;
       d.data.forEach(r => {
         const total = r.foreign_net + r.investment_trust_net + r.dealer_net;
@@ -253,7 +231,6 @@
           const w = max > 0 ? Math.min(100, Math.abs(n)/max*100) : 0;
           return `<span class="bar-wrap"><span class="bar-fill ${n>=0?'green':'red'}" style="width:${w}%"></span></span>`;
         };
-        const maxAbs = Math.max(...d.data.map(x => Math.abs(x.foreign_net)));
         html += `<tr>
           <td>${r.date.slice(5)}</td>
           <td>${fmt(r.foreign_net)}${bar(r.foreign_net, maxAbs)}</td>
@@ -281,22 +258,21 @@
       const rows = d.data.slice(-6).reverse();
       const sparkSvg = buildSparkline(rows.map(r => r.revenue));
 
-      let html = `<table class="rev-table"><thead><tr><th>月份</th><th>營收</th><th>月增率</th></tr></thead><tbody>`;
-      rows.forEach((r, i) => {
+      let html = `<table class="rev-table" style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px"><thead><tr><th style="color:var(--text-muted);font-weight:400;padding:6px 8px;text-align:left;border-bottom:1px solid var(--border-light);font-size:11px;text-transform:uppercase;letter-spacing:0.05em">月份</th><th style="color:var(--text-muted);font-weight:400;padding:6px 8px;text-align:right;border-bottom:1px solid var(--border-light);font-size:11px;text-transform:uppercase">營收</th><th style="color:var(--text-muted);font-weight:400;padding:6px 8px;text-align:right;border-bottom:1px solid var(--border-light);font-size:11px;text-transform:uppercase">月增率</th></tr></thead><tbody>`;
+      rows.forEach(r => {
         const arrow = r.mom > 0 ? '▲' : r.mom < 0 ? '▼' : '─';
         const cls = r.mom > 0 ? 'green' : r.mom < 0 ? 'red' : '';
         html += `<tr>
-          <td>${r.date}</td>
-          <td>NT$${(r.revenue/1e8).toFixed(2)}億</td>
-          <td class="${cls}">${arrow} ${r.mom > 0 ? '+' : ''}${r.mom}%</td>
+          <td style="padding:5px 8px;border-bottom:1px solid var(--border-light)">${r.date}</td>
+          <td style="padding:5px 8px;border-bottom:1px solid var(--border-light);text-align:right;font-family:var(--font-mono)">$${(r.revenue/1e8).toFixed(2)}億</td>
+          <td style="padding:5px 8px;border-bottom:1px solid var(--border-light);text-align:right" class="${cls}">${arrow} ${r.mom>0?'+':''}${r.mom}%</td>
         </tr>`;
       });
       html += '</tbody></table>';
       document.getElementById('rev-content').innerHTML = `
-        <div class="rev-layout">
-          <div class="rev-table-wrap">${html}</div>
-          <div class="sparkline-wrap">${sparkSvg}</div>
-        </div>`;
+        <div style="padding:8px 8px 4px">${html}</div>
+        <div class="sparkline-wrap">${sparkSvg}</div>
+      `;
     } catch(e) {
       document.getElementById('rev-content').innerHTML = noData(e.message);
     }
@@ -313,10 +289,11 @@
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     });
     const poly = pts.join(' ');
+    const lastX = pts[pts.length-1].split(',')[0];
     const lastY = pts[pts.length-1].split(',')[1];
     return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
-      <polyline points="${poly}" fill="none" stroke="#f0c040" stroke-width="1.5" stroke-linejoin="round"/>
-      <circle cx="${pts[pts.length-1].split(',')[0]}" cy="${lastY}" r="3" fill="#f0c040"/>
+      <polyline points="${poly}" fill="none" stroke="#1456f0" stroke-width="2" stroke-linejoin="round"/>
+      <circle cx="${lastX}" cy="${lastY}" r="4" fill="#1456f0"/>
     </svg>`;
   }
 
@@ -328,18 +305,17 @@
       document.getElementById('ai-meta').textContent = `${aiData.stock.symbol} ${aiData.stock.name} · ${new Date().toLocaleString('zh-TW')}`;
       document.getElementById('ai-preview').innerHTML = '<pre class="ai-text">' + aiData.text.replace(/</g,'&lt;') + '</pre>';
       document.getElementById('ai-panel').style.display = 'block';
-    } catch(e) {
-      document.getElementById('ai-panel').style.display = 'none';
-    }
+    } catch(e) { document.getElementById('ai-panel').style.display = 'none'; }
   }
 
   function copyText() {
     if (!aiData) return;
     navigator.clipboard.writeText(aiData.text).then(() => {
       const btn = document.getElementById('btn-copy-text');
-      btn.innerHTML = '<i data-lucide="check"></i> 已複製！';
-      lucide.createIcons();
-      setTimeout(() => btn.innerHTML = '<i data-lucide="copy"></i> 複製純文字摘要', 2000);
+      btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> 已複製！';
+      setTimeout(() => {
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> 複製純文字摘要';
+      }, 2000);
     });
   }
 
@@ -361,7 +337,8 @@
 
   // ─── Industry Allocation ───
   const SECTOR_COLORS = {
-    '半導體': '#f0c040', '金融': '#4fc3f7', '食品': '#3ddc97', '原物料': '#ff8800', '其他': '#888aa0'
+    '半導體': '#1456f0', '金融': '#35d39a', '食品': '#3ddc97',
+    '原物料': '#ff8800', '其他': '#8e8e93'
   };
 
   async function loadAllocation() {
@@ -372,34 +349,27 @@
         document.getElementById('alloc-content').innerHTML = noData('尚無持股');
         return;
       }
-      const total = data.reduce((s, r) => s + r.cost, 0);
-      let barsHtml = '';
+      let html = '<div class="alloc-rows" style="padding:8px 16px">';
       data.forEach(r => {
         const color = SECTOR_COLORS[r.sector] || SECTOR_COLORS['其他'];
-        const w = r.pct;
-        barsHtml += `<div class="alloc-row">
+        html += `<div class="alloc-row">
           <span class="alloc-sector" style="color:${color}">${r.sector}</span>
+          <div class="alloc-bar-wrap"><div class="alloc-bar-fill" style="width:${r.pct}%;background:${color}"></div></div>
           <span class="alloc-pct">${r.pct}%</span>
           <span class="alloc-cost">NT$${r.cost.toLocaleString()}</span>
           <span class="alloc-count">${r.stock_count}檔</span>
         </div>`;
       });
-      document.getElementById('alloc-content').innerHTML = `<div class="alloc-rows">${barsHtml}</div>`;
+      html += '</div>';
+      document.getElementById('alloc-content').innerHTML = html;
     } catch(e) {
       document.getElementById('alloc-content').innerHTML = noData(e.message);
     }
   }
 
   function noData(msg) {
-    return `<div class="no-data">[ NO DATA ] ${msg}</div>`;
+    return `<div class="no-data" style="padding:24px;text-align:center;color:var(--text-muted);font-size:13px">[ NO DATA ] ${msg}</div>`;
   }
-
-  // Footer time
-  function updateTime() {
-    const now = new Date();
-    document.getElementById('footer-time').textContent = now.toLocaleString('zh-TW');
-  }
-  updateTime(); setInterval(updateTime, 10000);
 
   init();
   </script>
