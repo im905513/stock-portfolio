@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WATCHLIST · GOLDMAN PORTFOLIO</title>
+  <link rel="stylesheet" href="/static/terminal.css?v=20260408b">
+</head>
+<body>
+
+  <header class="site-header">
+    <a href="/" class="header-brand">
+      <div class="logo-mark"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+      <span class="logo-text">GOLDMAN<span>.</span></span>
+      <span class="header-badge">WATCHLIST</span>
+    </a>
+    <div class="header-right"><div class="live-indicator"><span class="live-dot"></span><span>即時連線</span></div></div>
+  </header>
+
+  <div class="ticker-bar"><div class="ticker-track" id="ticker-track"><span class="ticker-loading">載入即時數據中...</span></div></div>
+
+  <nav class="pill-nav">
+    <a href="/" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>首頁</a>
+    <a href="/positions" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>持股</a>
+    <a href="/trades" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>交易</a>
+    <a href="/fundamentals" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>產業/基本面</a>
+    <a href="/stocks" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="9" y1="22" x2="9" y2="2"/><line x1="15" y1="22" x2="15" y2="2"/></svg>股票</a>
+    <a href="/watchlist" class="nav-link active"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>挖寶</a>
+  </nav>
+
+  <div class="page-wrapper">
+
+    <!-- Filters -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header">
+        <span class="card-title">DCA CANDIDATE DISCOVERY</span>
+        <span class="card-meta" id="discover-meta">--</span>
+      </div>
+      <div class="card-body">
+        <div id="discover-msg" class="msg"></div>
+        <form class="form-grid" onsubmit="runDiscover(event)">
+          <div class="form-row">
+            <input type="text" id="industry" placeholder="產業關鍵字 (例: 金融 / 食品 / 半導體)，留空 = 全部 DCA 友善產業">
+            <input type="number" id="min_score" placeholder="最低分 0-1" value="0.5" step="0.05" min="0" max="1">
+            <input type="number" id="pool" placeholder="池子大小" value="40" min="5" max="200">
+            <button type="submit" class="btn">挖掘候選</button>
+          </div>
+        </form>
+        <div style="font-size:11px;opacity:.65;margin-top:8px">
+          首次挖掘需 ~15-30 秒（FinMind 限流）。1 小時內同條件秒回快取。
+          評分依殖利率(0.35)、PE(0.25)、PBR(0.20)、營收揭露(0.20)。
+        </div>
+      </div>
+    </div>
+
+    <!-- Candidates -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header"><span class="card-title">CANDIDATES</span><span class="card-meta" id="cand-meta">--</span></div>
+      <div class="card-body" style="padding:0">
+        <div id="cand-list"><div class="empty-state">點上方「挖掘候選」開始</div></div>
+      </div>
+    </div>
+
+    <!-- Current watchlist -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">MY WATCHLIST</span><span class="card-meta" id="my-meta">--</span></div>
+      <div class="card-body" style="padding:0">
+        <div id="my-list"><div class="empty-state">LOADING...</div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-brand"><div class="footer-name">GOLDMAN PORTFOLIO</div><div class="footer-desc">DCA candidate mining for disciplined long-term investing.</div></div>
+      <div class="footer-col"><h4>導航</h4><ul><li><a href="/">首頁</a></li><li><a href="/positions">持股</a></li><li><a href="/watchlist">挖寶</a></li></ul></div>
+    </div>
+    <div class="footer-bottom"><span>GOLDMAN PORTFOLIO v2.0</span><span id="footer-time">--</span></div>
+  </footer>
+
+  <script src="/static/terminal.js?v=20260408b"></script>
+  <script src="/static/watchlist.js?v=20260408b"></script>
+</body>
+</html>

@@ -184,9 +184,12 @@ class CashIn(BaseModel):
 # ─── Stock CRUD ───────────────────────────────────────────
 
 @app.get("/api/stocks")
-def list_stocks():
+def list_stocks(watch_status: Optional[str] = None):
     with get_db() as db:
-        rows = db.execute("SELECT * FROM stocks ORDER BY symbol").fetchall()
+        if watch_status:
+            rows = db.execute("SELECT * FROM stocks WHERE watch_status=? ORDER BY symbol", (watch_status,)).fetchall()
+        else:
+            rows = db.execute("SELECT * FROM stocks ORDER BY symbol").fetchall()
         return [dict(r) for r in rows]
 
 @app.post("/api/stocks")
@@ -337,6 +340,34 @@ def fetch_finmind(dataset, symbol, start, end, token=""):
     url = f"https://api.finmindtrade.com/api/v4/data?dataset={dataset}&data_id={symbol}&start_date={start}&end_date={end}&token={token}"
     with urllib.request.urlopen(url, timeout=10) as r:
         return json.loads(r.read())
+
+def fetch_finmind_stock_info(token=""):
+    """全台股清單 (TaiwanStockInfo) — symbol/name/industry。24h cache。"""
+    cached = _cache_get("finmind:stock_info")
+    if cached is not None:
+        return cached
+    token = token or FINMIND_TOKEN
+    url = f"https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo&token={token}"
+    with urllib.request.urlopen(url, timeout=15) as r:
+        raw = json.loads(r.read())
+    out = []
+    seen = set()
+    for d in (raw.get("data") or []):
+        sym = (d.get("stock_id") or "").strip()
+        if not sym or sym in seen:
+            continue
+        # 只收純 4-6 碼數字代碼，過濾權證/期貨/特別股
+        if not sym.isdigit() or len(sym) < 4 or len(sym) > 6:
+            continue
+        seen.add(sym)
+        out.append({
+            "symbol": sym,
+            "name": (d.get("stock_name") or "").strip(),
+            "industry": (d.get("industry_category") or "").strip(),
+            "type": (d.get("type") or "").strip(),  # twse / tpex
+        })
+    _cache_set("finmind:stock_info", out, 86400)
+    return out
 
 # ─── Quote cache (in-memory TTL) ─────────────────────────
 import time, sys
@@ -873,6 +904,8 @@ def stocks_page(): return _no_cache_response(f"{STATIC_DIR}/stocks.html")
 def trades_page(): return _no_cache_response(f"{STATIC_DIR}/trades.html")
 @app.get("/positions")
 def positions_page(): return _no_cache_response(f"{STATIC_DIR}/positions.html")
+@app.get("/watchlist")
+def watchlist_page(): return _no_cache_response(f"{STATIC_DIR}/watchlist.html")
 
 # ─── Ticker ───────────────────────────────────────────────
 @app.get("/api/ticker")
@@ -1078,6 +1111,51 @@ def dashboard_thesis(_ok: bool = Depends(_localhost_only)):
             "status": r["status"],
         })
     return out
+
+
+@app.get("/api/dashboard/discover")
+def dashboard_discover(
+    min_score: float = 0.5,
+    limit: int = 20,
+    pool: int = 40,
+    industry: Optional[str] = None,
+    _ok: bool = Depends(_localhost_only),
+):
+    """前端 watchlist 用 — 直接調 ai_discover，限本機。"""
+    from ai_routes import ai_discover
+    return ai_discover(market="TW", min_score=min_score, limit=limit,
+                       pool=pool, exclude_held=True, industry=industry)
+
+
+class _WatchAddBody(BaseModel):
+    symbol: str
+    name: Optional[str] = None
+    sector: Optional[str] = None
+    market: str = "TW"
+
+
+@app.post("/api/dashboard/watchlist/add")
+def dashboard_watchlist_add(body: _WatchAddBody, _ok: bool = Depends(_localhost_only)):
+    """前端「加入追蹤」按鈕呼叫；底層走 ai_watchlist_add。"""
+    from ai_routes import ai_watchlist_add, WatchlistAddIn
+    return ai_watchlist_add(WatchlistAddIn(**body.model_dump()))
+
+
+@app.get("/api/dashboard/watchlist")
+def dashboard_watchlist(_ok: bool = Depends(_localhost_only)):
+    """目前 watch_status='watchlist' 的清單。"""
+    with get_db() as db:
+        rows = db.execute("SELECT * FROM stocks WHERE watch_status='watchlist' ORDER BY created_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+
+@app.post("/api/dashboard/watchlist/remove")
+def dashboard_watchlist_remove(body: _WatchAddBody, _ok: bool = Depends(_localhost_only)):
+    """從 watchlist 移除（設為 archived）。"""
+    with get_db() as db:
+        cur = db.execute("UPDATE stocks SET watch_status='archived' WHERE symbol=? AND watch_status='watchlist'", (body.symbol,))
+        db.commit()
+        return {"ok": True, "affected": cur.rowcount}
 
 
 # ─── Migrations (additive, run-once, ordered) ──────────────

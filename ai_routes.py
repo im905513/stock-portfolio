@@ -23,6 +23,7 @@ from main import (
     fetch_us_quote,
     fetch_yahoo_quote,
     fetch_finmind,
+    fetch_finmind_stock_info,
     fetch_twse_realtime,
     setting_get,
     _cache_get,
@@ -500,9 +501,10 @@ def ai_screen(
     min_yield: Optional[float] = Query(None),
     held_only: bool = Query(False, description="只看已持有"),
 ):
-    """從已註冊股票中篩選候選 — 支援多條件過濾。FinMind 只支援台股估值。"""
+    """從已註冊股票中篩選候選 — 支援多條件過濾。FinMind 只支援台股估值。
+    僅看 watch_status='active'，watchlist 候選請改用 /discover。"""
     with get_db() as db:
-        q = "SELECT * FROM stocks WHERE 1=1"
+        q = "SELECT * FROM stocks WHERE COALESCE(watch_status,'active')='active'"
         params = []
         if market:
             q += " AND market=?"; params.append(market)
@@ -574,3 +576,249 @@ def ai_journal(t: ThesisIn):
         """, (stock["id"], t.trade_id, t.thesis, t.exit_condition, t.target_price, t.stop_loss))
         db.commit()
         return {"id": cur.lastrowid, "ok": True}
+
+
+# ─── 2.6 Discover (DCA candidate mining) ──────────────────
+#
+# 與 /screen 的差異：
+#   /screen   = 從 DB 已註冊股票 SELECT，受限於追蹤池
+#   /discover = 從 FinMind TaiwanStockInfo 全市場挖掘，再評分
+#
+# DCA 適合度評分 (0-1)：
+#   殖利率 ≥ 4%             權重 0.35
+#   PE 落在 10-20 合理區間   權重 0.25
+#   近 12 月有營收紀錄       權重 0.20  (FinMind dividend 資料集穩定性差，暫用營收存在性代理)
+#   PBR ≤ 2                 權重 0.20
+#
+# 缺資料時不直接歸零，會降權 (回傳 score 仍可用)。
+
+# 預設候選池 — 第一版限縮在「適合 DCA 的產業」，避免暴衝小型股
+_DCA_INDUSTRY_KEYWORDS = (
+    "金融", "Financial", "Finance",
+    "食品", "Food",
+    "電子", "Semiconductor", "半導體",
+    "電信", "Telecom",
+    "公用", "Utilit",
+    "塑膠", "Plastic",
+    "鋼鐵", "Steel",
+)
+
+
+def _dca_score(per, pbr, dy, has_revenue):
+    """0-1。缺值用降權，不歸零。回 (score, reasons)。"""
+    score = 0.0
+    weight_used = 0.0
+    reasons = []
+
+    # 殖利率 (0.35)
+    if dy is not None:
+        weight_used += 0.35
+        if dy >= 5:
+            score += 0.35; reasons.append(f"殖利率 {dy:.2f}% 優異")
+        elif dy >= 4:
+            score += 0.30; reasons.append(f"殖利率 {dy:.2f}% 達標")
+        elif dy >= 3:
+            score += 0.18; reasons.append(f"殖利率 {dy:.2f}% 普通")
+        else:
+            score += 0.05; reasons.append(f"殖利率 {dy:.2f}% 偏低")
+
+    # PE (0.25) — 合理區間 10-20
+    if per is not None and per > 0:
+        weight_used += 0.25
+        if 10 <= per <= 20:
+            score += 0.25; reasons.append(f"PE {per:.1f} 合理區")
+        elif 8 <= per < 10 or 20 < per <= 25:
+            score += 0.18; reasons.append(f"PE {per:.1f} 邊緣")
+        elif per < 8:
+            score += 0.12; reasons.append(f"PE {per:.1f} 偏低 (留意基本面)")
+        else:
+            score += 0.05; reasons.append(f"PE {per:.1f} 偏貴")
+
+    # PBR (0.20)
+    if pbr is not None and pbr > 0:
+        weight_used += 0.20
+        if pbr <= 1.5:
+            score += 0.20; reasons.append(f"PBR {pbr:.2f} 便宜")
+        elif pbr <= 2:
+            score += 0.14; reasons.append(f"PBR {pbr:.2f} 合理")
+        elif pbr <= 3:
+            score += 0.07; reasons.append(f"PBR {pbr:.2f} 偏貴")
+        else:
+            score += 0.02; reasons.append(f"PBR {pbr:.2f} 高估")
+
+    # 營收資料存在性 (0.20)
+    if has_revenue is not None:
+        weight_used += 0.20
+        if has_revenue:
+            score += 0.20; reasons.append("近 12 月營收正常揭露")
+        else:
+            score += 0.05
+
+    # 全部缺資料的話直接 0
+    if weight_used == 0:
+        return 0.0, ["無 FinMind 資料"]
+    # 降權後的 score 還原到 0-1 區間（避免缺資料股票分數被嚴重低估）
+    normalized = round(score / weight_used, 3)
+    return normalized, reasons
+
+
+def _fetch_dca_metrics(symbol):
+    """單檔抓 PE/PBR/yield + 是否有近期營收。失敗回 None 們。"""
+    today = _date.today()
+    per = pbr = dy = None
+    has_revenue = None
+    try:
+        data = fetch_finmind("TaiwanStockPER", symbol, (today - timedelta(days=14)).isoformat(), today.isoformat())
+        if data.get("data"):
+            latest = data["data"][-1]
+            per = latest.get("PER")
+            pbr = latest.get("PBR")
+            dy = latest.get("dividend_yield")
+    except Exception:
+        pass
+    try:
+        data = fetch_finmind("TaiwanStockMonthRevenue", symbol, (today - timedelta(days=120)).isoformat(), today.isoformat())
+        rows = data.get("data") or []
+        has_revenue = len(rows) > 0
+    except Exception:
+        pass
+    return per, pbr, dy, has_revenue
+
+
+@router.get("/discover", dependencies=[Depends(require_token)])
+def ai_discover(
+    market: str = Query("TW", description="目前只支援 TW (FinMind)"),
+    min_score: float = Query(0.5, ge=0, le=1),
+    limit: int = Query(20, ge=1, le=50),
+    pool: int = Query(40, ge=5, le=200, description="候選池大小 (FinMind 抓取上限)"),
+    exclude_held: bool = Query(True),
+    industry: Optional[str] = Query(None, description="只挑某產業 (子字串比對)"),
+):
+    """從 FinMind 全台股清單挖掘適合定期定額的候選，依 DCA score 排序回傳。
+
+    第一次跑可能 ~15-30s (FinMind rate limit)。結果 1h cache。
+    """
+    if market != "TW":
+        raise HTTPException(400, "目前只支援 market=TW")
+
+    cache_key = f"ai_discover:{market}:{industry or 'all'}:{pool}"
+    cached = _cache_get(cache_key)
+    if cached is None:
+        # 取全市場清單
+        try:
+            all_stocks = fetch_finmind_stock_info()
+        except Exception as e:
+            raise HTTPException(503, f"FinMind TaiwanStockInfo 取得失敗: {e}")
+
+        # 過濾：產業關鍵字
+        def _match_industry(s):
+            ind = s.get("industry") or ""
+            if industry:
+                return industry.lower() in ind.lower()
+            return any(k in ind for k in _DCA_INDUSTRY_KEYWORDS)
+
+        candidates_pool = [s for s in all_stocks if _match_industry(s)][:pool]
+
+        results = []
+        for s in candidates_pool:
+            per, pbr, dy, has_rev = _fetch_dca_metrics(s["symbol"])
+            score, reasons = _dca_score(per, pbr, dy, has_rev)
+            results.append({
+                "symbol": s["symbol"],
+                "name": s["name"],
+                "industry": s["industry"],
+                "per": per, "pbr": pbr, "dividend_yield": dy,
+                "score": score,
+                "reasons": reasons,
+            })
+        results.sort(key=lambda x: -x["score"])
+        _cache_set(cache_key, results, 3600)
+        cached = results
+
+    # 排除已持有 / watch_status='active'
+    excluded = set()
+    if exclude_held:
+        with get_db() as db:
+            held = db.execute("SELECT symbol FROM stocks WHERE watch_status='active'").fetchall()
+            excluded = {r["symbol"] for r in held}
+
+    # 標記哪些已在 watchlist
+    with get_db() as db:
+        watch_rows = db.execute("SELECT symbol FROM stocks WHERE watch_status='watchlist'").fetchall()
+        in_watchlist = {r["symbol"] for r in watch_rows}
+
+    filtered = []
+    for c in cached:
+        if c["symbol"] in excluded:
+            continue
+        if c["score"] < min_score:
+            continue
+        filtered.append({**c, "in_watchlist": c["symbol"] in in_watchlist})
+        if len(filtered) >= limit:
+            break
+
+    return {
+        "snapshot_at": _dt.now().isoformat(),
+        "market": market,
+        "min_score": min_score,
+        "pool_size": len(cached),
+        "count": len(filtered),
+        "candidates": filtered,
+    }
+
+
+# ─── 2.7 Watchlist add ────────────────────────────────────
+
+class WatchlistAddIn(BaseModel):
+    symbol: str
+    name: Optional[str] = None
+    sector: Optional[str] = None
+    market: str = "TW"
+
+
+@router.post("/watchlist/add", dependencies=[Depends(require_token)])
+def ai_watchlist_add(w: WatchlistAddIn):
+    """加入 watchlist。若 DB 沒有該 symbol，從 FinMind TaiwanStockInfo 補資料後 INSERT。"""
+    sym = w.symbol.strip()
+    if not sym:
+        raise HTTPException(400, "symbol 不能為空")
+
+    name = w.name
+    sector = w.sector
+    market = w.market
+
+    with get_db() as db:
+        existing = db.execute("SELECT * FROM stocks WHERE symbol=?", (sym,)).fetchone()
+        if existing:
+            existing = dict(existing)
+            cur_status = existing.get("watch_status", "active")
+            if cur_status == "active":
+                # 已持有 — 不該被加入 watchlist
+                return {"ok": True, "stock": existing, "note": "already active (held)"}
+            if cur_status != "watchlist":
+                db.execute("UPDATE stocks SET watch_status='watchlist' WHERE id=?", (existing["id"],))
+                db.commit()
+                existing["watch_status"] = "watchlist"
+            return {"ok": True, "stock": existing, "note": "moved to watchlist"}
+
+        # 新股 — 補 name/sector
+        if not name or not sector:
+            try:
+                info_list = fetch_finmind_stock_info()
+                hit = next((x for x in info_list if x["symbol"] == sym), None)
+                if hit:
+                    name = name or hit["name"]
+                    sector = sector or hit["industry"]
+            except Exception:
+                pass
+        if not name:
+            raise HTTPException(400, f"無法取得 {sym} 的名稱，請手動提供 name")
+
+        currency = "USD" if market == "US" else "TWD"
+        cur = db.execute(
+            "INSERT INTO stocks (symbol, name, market, sector, currency, investment_style, watch_status) VALUES (?,?,?,?,?,?,?)",
+            (sym, name, market, sector, currency, "dca", "watchlist"),
+        )
+        db.commit()
+        new_row = db.execute("SELECT * FROM stocks WHERE id=?", (cur.lastrowid,)).fetchone()
+        return {"ok": True, "stock": dict(new_row), "note": "created"}
