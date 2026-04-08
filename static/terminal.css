@@ -655,6 +655,12 @@ body {
   text-shadow: 0 1px 3px rgba(0,0,0,0.5);
 }
 
+.ticker-name {
+  color: rgba(255,255,255,0.88);
+  font-size: 12px;
+  font-weight: 500;
+  margin-left: -4px;
+}
 .ticker-price { color: rgba(255,255,255,0.92); font-weight: 600; }
 .ticker-change {
   color: rgba(255,255,255,0.80);

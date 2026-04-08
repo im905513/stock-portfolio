@@ -9,10 +9,29 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 from contextlib import contextmanager
-import os
 
-DATABASE = "/home/ubuntu/stock-portfolio/stock.db"
-STATIC_DIR = "/home/ubuntu/stock-portfolio/static"
+# ─── Load .env (no extra dependency) ─────────────────────
+def _load_env():
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.isfile(env_path):
+        return
+    try:
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k, v = k.strip(), v.strip().strip('"').strip("'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except Exception as e:
+        print(f"[env] load error: {e}")
+_load_env()
+
+_BASE = os.path.dirname(os.path.abspath(__file__))
+DATABASE = os.getenv("DB_PATH", os.path.join(_BASE, "stock.db"))
+STATIC_DIR = os.getenv("STATIC_DIR", os.path.join(_BASE, "static"))
 ALPHA_KEY = os.getenv("ALPHA_VANTAGE_KEY", "")
 FINMIND_TOKEN = os.getenv("FINMIND_TOKEN", "")
 
@@ -315,20 +334,46 @@ def _twse_fetch_one(sym: str):
             if not arr:
                 continue
             r0 = arr[0]
-            price_str = (r0.get("z") or "").strip()
-            y_str = (r0.get("y") or "").strip()
-            pz_str = (r0.get("pz") or "").strip()  # 參考價
-            o_str = (r0.get("o") or "").strip()
-            y = float(y_str) if y_str and y_str != "-" else 0
-            # 現價三層 fallback：z (即時) → pz (參考價) → y (昨收) → o (開盤)
-            if price_str and price_str != "-":
-                price = float(price_str)
-            elif pz_str and pz_str != "-":
-                price = float(pz_str)
+            def _f(key):
+                s = (r0.get(key) or "").strip()
+                try:
+                    return float(s) if s and s != "-" else 0
+                except ValueError:
+                    return 0
+
+            def _first(key):
+                """a/b 欄位是 '1945.0000_1950.0000_...'，取第一個"""
+                s = (r0.get(key) or "").strip()
+                if not s or s == "-":
+                    return 0
+                first = s.split("_")[0].strip()
+                try:
+                    return float(first) if first and first != "-" else 0
+                except ValueError:
+                    return 0
+
+            z = _f("z")    # 即時成交價
+            pz = _f("pz")  # 最近一筆快取價
+            y = _f("y")    # 昨收
+            o = _f("o")    # 今開
+            best_ask = _first("a")
+            best_bid = _first("b")
+
+            # 現價 fallback 鏈（盤中 z 常為空，要用買賣盤中價補）
+            if z:
+                price = z
+            elif pz:
+                price = pz
+            elif best_bid and best_ask:
+                price = round((best_bid + best_ask) / 2, 2)
+            elif best_bid:
+                price = best_bid
+            elif best_ask:
+                price = best_ask
+            elif o:
+                price = o   # 盤後才會 fallback 到今開
             elif y:
                 price = y
-            elif o_str and o_str != "-":
-                price = float(o_str)
             else:
                 price = 0
             chg = round(price - y, 2) if price and y else 0
@@ -337,14 +382,16 @@ def _twse_fetch_one(sym: str):
                 "symbol": r0.get("c", sym),
                 "name": (r0.get("n") or "").strip(),
                 "price": price,
-                "open": float(o_str) if o_str and o_str != "-" else 0,
-                "high": float(r0.get("h") or 0) or 0,
-                "low": float(r0.get("l") or 0) or 0,
-                "volume": int(r0.get("v") or 0) or 0,
+                "open": o,
+                "high": _f("h"),
+                "low": _f("l"),
+                "volume": int(_f("v")),
                 "change": chg,
                 "change_pct": chg_pct,
                 "prev_close": y,
-                "time": r0.get("t", ""),
+                "bid": best_bid,
+                "ask": best_ask,
+                "time": r0.get("t", "") or r0.get("%", ""),
             }
         except Exception as e:
             print(f"[TWSE] {prefix}_{sym} error: {e}", file=sys.stderr)
@@ -380,36 +427,80 @@ def fetch_twse_batch(symbols: list):
                     _cache_set(f"twse:{sym}", data, _TWSE_TTL)
     return result
 
+def fetch_yahoo_quote(symbol: str):
+    """Yahoo Finance 美股/ETF 即時報價（無需 API key，含 TTL 快取）"""
+    cache_key = f"yh:{symbol}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=2d"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            data = json.loads(r.read())
+        res = (data.get("chart", {}).get("result") or [None])[0]
+        if not res:
+            return {"error": "無資料"}
+        meta = res.get("meta", {}) or {}
+        price = float(meta.get("regularMarketPrice") or 0)
+        prev = float(meta.get("chartPreviousClose") or meta.get("previousClose") or 0)
+        chg = round(price - prev, 2) if price and prev else 0
+        chg_pct = round(chg / prev * 100, 2) if prev else 0
+        result = {
+            "symbol": symbol,
+            "price": price,
+            "change": chg,
+            "change_pct": chg_pct,
+            "prev_close": prev,
+            "time": str(meta.get("regularMarketTime") or ""),
+        }
+        if price > 0:
+            _cache_set(cache_key, result, _TWSE_TTL)
+        return result
+    except Exception as e:
+        print(f"[Yahoo] {symbol} error: {e}", file=sys.stderr)
+        return {"error": str(e)}
+
 def fetch_alphavantage(symbol: str, key: str = ""):
-    """Alpha Vantage 美股即時報價（含 TTL 快取，避開 5 req/min 限流）"""
+    """Alpha Vantage 美股報價（備援，25 req/天限制，含 TTL 快取）"""
     cache_key = f"av:{symbol}"
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
     key = key or ALPHA_KEY
+    if not key:
+        return {"error": "no_key"}
     try:
         url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={key}"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=8) as r:
             data = json.loads(r.read())
         if data.get("Note") or data.get("Information"):
-            print(f"[AlphaVantage] rate-limited: {data}", file=sys.stderr)
-            # 限流時回前次快取（若有）讓前端不要閃空
+            print(f"[AlphaVantage] rate-limited: {str(data)[:200]}", file=sys.stderr)
             return {"error": "rate_limited"}
         q = data.get("Global Quote", {}) or {}
-        if q and q.get("05. price"):
-            result = {
-                "symbol": symbol,
-                "price": float(q.get("05. price", 0)),
-                "change": float(q.get("09. change", 0) or 0),
-                "change_pct": float((q.get("10. change percent") or "0").replace("%", "")),
-            }
-            _cache_set(cache_key, result, _AV_TTL)
-            return result
-        return {"error": "無資料"}
+        price = float(q.get("05. price") or 0)
+        if price <= 0:
+            return {"error": "無資料"}
+        result = {
+            "symbol": symbol,
+            "price": price,
+            "change": float(q.get("09. change") or 0),
+            "change_pct": float((q.get("10. change percent") or "0").replace("%", "")),
+        }
+        _cache_set(cache_key, result, _AV_TTL)
+        return result
     except Exception as e:
         print(f"[AlphaVantage] {symbol} error: {e}", file=sys.stderr)
         return {"error": str(e)}
+
+def fetch_us_quote(symbol: str):
+    """美股報價：Yahoo 主，Alpha Vantage 備援"""
+    res = fetch_yahoo_quote(symbol)
+    if res and res.get("price", 0) > 0:
+        return res
+    print(f"[Quote] Yahoo failed for {symbol}, falling back to Alpha Vantage", file=sys.stderr)
+    return fetch_alphavantage(symbol)
 
 # ─── 即時報價 API ────────────────────────────────────────
 @app.get("/api/positions/rt")
@@ -439,10 +530,10 @@ def positions_with_realtime():
         for sym, d in tw_result.items():
             tw_map[sym]["_rt"] = d
 
-    # Alpha Vantage 美股
+    # 美股：Yahoo 主 / Alpha Vantage 備援
     for sym in us_map:
-        d = fetch_alphavantage(sym)
-        if "error" not in d:
+        d = fetch_us_quote(sym)
+        if "error" not in d and d.get("price", 0) > 0:
             us_map[sym]["_rt"] = d
 
     all_data = {**tw_map, **us_map}
@@ -477,11 +568,11 @@ def realtime_quote(symbol: str):
     """
     統一即時報價端點
     台股（4-6碼數字）→ TWSE
-    美股（字母）→ Alpha Vantage
+    美股（字母）→ Yahoo（AV 備援）
     """
     if symbol.isdigit() and len(symbol) <= 6:
         return fetch_twse_realtime(symbol)
-    return fetch_alphavantage(symbol)
+    return fetch_us_quote(symbol)
 
 @app.get("/api/realtime/batch")
 def realtime_batch(symbols: str):
@@ -497,7 +588,7 @@ def realtime_batch(symbols: str):
         if sym.isdigit() and len(sym) <= 6:
             results.append(fetch_twse_realtime(sym))
         else:
-            results.append(fetch_alphavantage(sym))
+            results.append(fetch_us_quote(sym))
     return results
 
 @app.get("/api/stocks/{stock_id}/valuation")

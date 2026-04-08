@@ -63,8 +63,10 @@ async function loadTicker() {
     const dir = pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat';
     const sign = pct > 0 ? '+' : '';
     const priceStr = t.price > 0 ? (Number.isInteger(t.price) ? t.price.toLocaleString() : t.price.toFixed(2)) : '—';
+    const nameStr = t.name ? `<span class="ticker-name">${t.name}</span>` : '';
     return `<span class="ticker-item">
       <span class="ticker-symbol">${t.symbol}</span>
+      ${nameStr}
       <span class="ticker-price">${priceStr}</span>
       <span class="ticker-change ${dir}">${sign}${pct.toFixed(2)}%</span>
     </span>`;
