@@ -1080,8 +1080,43 @@ def dashboard_thesis(_ok: bool = Depends(_localhost_only)):
     return out
 
 
+# ─── Migrations (additive, run-once, ordered) ──────────────
+def run_migrations():
+    """依序執行 migrations/NNN_*.sql，已跑過的跳過"""
+    mig_dir = os.path.join(_BASE, "migrations")
+    if not os.path.isdir(mig_dir):
+        return
+    files = sorted(f for f in os.listdir(mig_dir) if f.endswith(".sql"))
+    if not files:
+        return
+    with get_db() as db:
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version TEXT PRIMARY KEY,
+                applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        applied = {r["version"] for r in db.execute("SELECT version FROM schema_migrations").fetchall()}
+        for fname in files:
+            version = fname.rsplit(".", 1)[0]  # 001_seed_thesis
+            if version in applied:
+                continue
+            path = os.path.join(mig_dir, fname)
+            with open(path, "r", encoding="utf-8") as f:
+                sql = f.read()
+            try:
+                db.executescript("BEGIN; " + sql + " ; COMMIT;")
+                db.execute("INSERT INTO schema_migrations(version) VALUES (?)", (version,))
+                db.commit()
+                print(f"[migration] applied {fname}")
+            except Exception as e:
+                db.execute("ROLLBACK")
+                print(f"[migration] FAILED {fname}: {e}")
+                raise
+
 # ─── Init ─────────────────────────────────────────────────
 init_db()
+run_migrations()
 
 # ─── AI namespace router ──────────────────────────────────
 from ai_routes import router as ai_router  # noqa: E402

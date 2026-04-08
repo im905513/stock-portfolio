@@ -55,9 +55,12 @@ grep -c AI_API_TOKEN .env   # 應該回 1
 
 ---
 
-## Step 3 — 重啟 server，自動建立新表
+## Step 3 — 重啟 server，自動建立新表 + 跑 migrations
 
-`init_db()` 會在 server 啟動時 `CREATE TABLE IF NOT EXISTS`，所以**只要重啟就會建好**，不用手動下 SQL。
+`init_db()` 會 `CREATE TABLE IF NOT EXISTS` 建基礎表，`run_migrations()` 會按順序執行 `migrations/NNN_*.sql` 裡尚未套用的 migration（透過 `schema_migrations` 表追蹤），兩者**啟動時自動**，不用手動下 SQL。
+
+目前 migrations 清單：
+- `001_seed_thesis.sql` — 為 5 檔持股寫入初始 thesis（target / stop loss / 退出條件）
 
 ```bash
 # 用你目前的啟動方式，例如：
@@ -67,12 +70,20 @@ pkill -f "uvicorn main:app"
 nohup python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 > /var/log/stock.log 2>&1 &
 ```
 
-驗證新表都建好：
+驗證新表都建好 + migration 都跑過：
 ```bash
 sqlite3 stock.db ".tables"
 # 應該包含: alert_rules allocation_targets cash nav_history positions
-#          settings stock_prices stocks thesis trades
+#          schema_migrations settings stock_prices stocks thesis trades
+
+sqlite3 stock.db "SELECT * FROM schema_migrations"
+# 應該至少看到: 001_seed_thesis|<timestamp>
+
+sqlite3 stock.db "SELECT COUNT(*) FROM thesis WHERE status='active'"
+# 應該 ≥ 5 (每檔持股至少一筆)
 ```
+
+查 server log 應看到 `[migration] applied 001_seed_thesis.sql` 那一行（或空 — 若之前已套用過就不會再跑）。
 
 ---
 
