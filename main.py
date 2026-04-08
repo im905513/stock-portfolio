@@ -4,7 +4,7 @@ Tim 股票投資系統 - FastAPI 後端
 import sqlite3, os, urllib.request, json
 from datetime import datetime, date, timedelta
 from typing import Optional, Literal
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
@@ -1015,6 +1015,69 @@ def goal_2031():
         },
         "note": "realized_cagr / projected 年至少要兩天 nav_history 才會出現" if realized_cagr is None else None,
     }
+
+
+# ─── Dashboard endpoints (同源、無 token、限本機) ────────
+
+def _localhost_only(request: Request):
+    """限制 endpoint 只能本機呼叫；reverse proxy 走 X-Forwarded-For 也擋"""
+    client = request.client.host if request.client else ""
+    fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    allowed = {"127.0.0.1", "::1", "localhost"}
+    real = fwd or client
+    if real not in allowed and not real.startswith("192.168.") and not real.startswith("10."):
+        raise HTTPException(403, "Localhost / LAN only")
+    return True
+
+@app.get("/api/nav/history")
+def nav_history(days: int = 90, _ok: bool = Depends(_localhost_only)):
+    """從 nav_history 撈時序資料給前端畫圖。預設 90 天。"""
+    days = max(1, min(days, 3650))
+    cache_key = f"navhist:{days}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    with get_db() as db:
+        rows = db.execute("""
+            SELECT date, total_value, equity_value, cash, twii_close, sp500_close
+            FROM nav_history
+            WHERE date >= date('now', ?)
+            ORDER BY date ASC
+        """, (f"-{days} days",)).fetchall()
+    out = [dict(r) for r in rows]
+    _cache_set(cache_key, out, 60)
+    return out
+
+@app.get("/api/dashboard/summary")
+def dashboard_summary(_ok: bool = Depends(_localhost_only)):
+    """前端 command center 用：portfolio 全 context，無 token (限本機/內網)"""
+    from ai_routes import ai_portfolio
+    return ai_portfolio()
+
+@app.get("/api/dashboard/thesis")
+def dashboard_thesis(_ok: bool = Depends(_localhost_only)):
+    """所有 active thesis，用 symbol 當 key 給前端紀律檢查表"""
+    with get_db() as db:
+        rows = db.execute("""
+            SELECT s.symbol, t.thesis, t.exit_condition, t.target_price, t.stop_loss,
+                   t.created_at, t.status
+            FROM thesis t
+            JOIN stocks s ON s.id = t.stock_id
+            WHERE t.status = 'active'
+            ORDER BY t.created_at DESC
+        """).fetchall()
+    out = {}
+    for r in rows:
+        sym = r["symbol"]
+        out.setdefault(sym, []).append({
+            "thesis": r["thesis"],
+            "exit_condition": r["exit_condition"],
+            "target_price": r["target_price"],
+            "stop_loss": r["stop_loss"],
+            "created_at": r["created_at"],
+            "status": r["status"],
+        })
+    return out
 
 
 # ─── Init ─────────────────────────────────────────────────

@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GOLDMAN PORTFOLIO · Tim's Command Center</title>
-  <link rel="stylesheet" href="/static/terminal.css?v=20260408">
+  <link rel="stylesheet" href="/static/terminal.css?v=20260408b">
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.50.0/dist/apexcharts.min.js"></script>
 </head>
 <body>
 
@@ -15,13 +16,10 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
       </div>
       <span class="logo-text">GOLDMAN<span>.</span></span>
-      <span class="header-badge">TIM'S COMMAND CENTER</span>
+      <span class="header-badge">COMMAND CENTER</span>
     </a>
     <div class="header-right">
-      <div class="live-indicator">
-        <span class="live-dot"></span>
-        <span>即時連線</span>
-      </div>
+      <div class="live-indicator"><span class="live-dot"></span><span>即時連線</span></div>
     </div>
   </header>
 
@@ -32,132 +30,130 @@
 
   <!-- Pill Nav -->
   <nav class="pill-nav">
-    <a href="/" class="nav-link active">
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-      首頁
-    </a>
-    <a href="/dashboard" class="nav-link">
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-      儀表板
-    </a>
-    <a href="/positions" class="nav-link">
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-      持股
-    </a>
-    <a href="/trades" class="nav-link">
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-      交易
-    </a>
-    <a href="/fundamentals" class="nav-link">
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
-      產業/基本面
-    </a>
-    <a href="/stocks" class="nav-link">
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="9" y1="22" x2="9" y2="2"/><line x1="15" y1="22" x2="15" y2="2"/></svg>
-      股票
-    </a>
+    <a href="/" class="nav-link active"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>首頁</a>
+    <a href="/positions" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>持股</a>
+    <a href="/trades" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>交易</a>
+    <a href="/fundamentals" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>產業/基本面</a>
+    <a href="/stocks" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="9" y1="22" x2="9" y2="2"/><line x1="15" y1="22" x2="15" y2="2"/></svg>股票</a>
   </nav>
 
   <!-- Page -->
   <div class="page-wrapper">
 
-    <div class="hero-card">
-      <div class="hero-label">MISSION OBJECTIVE · 2031</div>
-      <div class="hero-headline">年被動收入 <span class="highlight">NT$200,000</span></div>
-      <div class="hero-sub">月投 NT$25,000 存股 + 題材帳戶紀律操作。有題材攻，沒題材守。</div>
-    </div>
+    <!-- ROW 1: Hero KPI cards -->
+    <section class="dash-row">
+      <div class="dash-grid-4">
+        <div class="kpi-card" id="kpi-nav">
+          <div class="kpi-label">總資產 NAV</div>
+          <div class="kpi-value">--</div>
+          <div class="kpi-sub">--</div>
+        </div>
+        <div class="kpi-card" id="kpi-cash">
+          <div class="kpi-label">現金比</div>
+          <div class="kpi-value">--</div>
+          <div class="kpi-sub">--</div>
+        </div>
+        <div class="kpi-card" id="kpi-cagr">
+          <div class="kpi-label">已實現 CAGR</div>
+          <div class="kpi-value">--</div>
+          <div class="kpi-sub">需要 -- 才能達標</div>
+        </div>
+        <div class="kpi-card" id="kpi-goal">
+          <div class="kpi-label">距 2031 缺口</div>
+          <div class="kpi-value">--</div>
+          <div class="kpi-sub">-- 年</div>
+        </div>
+      </div>
+    </section>
 
-    <div class="card" style="margin-bottom:20px">
-      <div class="card-body">
-        <div class="obj-grid">
-          <div class="obj-item">
-            <div class="obj-label">目標年份</div>
-            <div class="obj-value">2031</div>
+    <!-- ROW 2: NAV chart + Alerts -->
+    <section class="dash-row">
+      <div class="dash-grid-8-4">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">NAV 軌跡 vs ^TWII</span>
+            <div class="chart-range-tabs" id="nav-range-tabs">
+              <button data-days="30">30D</button>
+              <button data-days="90" class="active">90D</button>
+              <button data-days="365">1Y</button>
+              <button data-days="3650">ALL</button>
+            </div>
           </div>
-          <div class="obj-item">
-            <div class="obj-label">被動收入目標</div>
-            <div class="obj-value accent">NT$200,000</div>
+          <div class="card-body chart-body">
+            <div id="nav-chart" class="chart-host">
+              <div class="chart-empty">載入中…</div>
+            </div>
           </div>
-          <div class="obj-item">
-            <div class="obj-label">月定投 DCA</div>
-            <div class="obj-value">NT$25,000</div>
+        </div>
+
+        <div class="card alerts-card">
+          <div class="card-header">
+            <span class="card-title">ALERTS</span>
+            <span class="card-meta" id="alerts-count">--</span>
           </div>
-          <div class="obj-item">
-            <div class="obj-label">操作原則</div>
-            <div class="obj-value" style="font-size:1rem;font-family:'DM Sans',sans-serif;font-weight:500">有題材攻 · 沒題材守</div>
+          <div class="card-body alerts-body" id="alerts-list">
+            <div class="alert-empty">載入中…</div>
           </div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div class="grid-2">
+    <!-- ROW 3: 三欄 -->
+    <section class="dash-row">
+      <div class="dash-grid-3">
+        <div class="card">
+          <div class="card-header"><span class="card-title">產業配置</span></div>
+          <div class="card-body chart-body">
+            <div id="sector-chart" class="chart-host"><div class="chart-empty">載入中…</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">DRIFT vs 目標</span></div>
+          <div class="card-body chart-body">
+            <div id="drift-chart" class="chart-host"><div class="chart-empty">尚未設定 allocation_targets</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">今日動態</span></div>
+          <div class="card-body movers-body" id="movers-list">
+            <div class="movers-empty">載入中…</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROW 4: 紀律檢查 -->
+    <section class="dash-row">
       <div class="card">
         <div class="card-header">
-          <span class="card-title">NAV STATUS</span>
-          <span class="card-meta" id="nav-time">--</span>
+          <span class="card-title">持股紀律檢查 (THESIS)</span>
+          <span class="card-meta">target / stop loss / exit condition</span>
         </div>
-        <div class="card-body">
-          <div class="big-stat" id="nav-value">--</div>
-          <div class="stat-row"><span class="label">現金 Cash</span><span class="value" id="cash-value">--</span></div>
-          <div class="stat-row"><span class="label">股票成本 Equity Cost</span><span class="value" id="equity-value">--</span></div>
-          <div class="stat-row"><span class="label">持股檔數 Positions</span><span class="value" id="pos-count">--</span></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><span class="card-title">QUICK ACTIONS</span></div>
-        <div class="card-body">
-          <a href="/trades" class="action-btn primary">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-            新增交易
-          </a>
-          <a href="/positions" class="action-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-            查看持股
-          </a>
-          <a href="/stocks" class="action-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            股票註冊表
-          </a>
-          <a href="/fundamentals" class="action-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
-            產業/基本面
-          </a>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title">INTEL FEED</span>
-        <span class="card-meta">GOLDMAN ANALYSIS · LIVE</span>
-      </div>
-      <div class="card-body">
-        <div class="intel-list">
-          <div class="intel-item">
-            <svg class="intel-icon warn" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            <div>
-              <div class="intel-title">伊朗局勢升級 · GDX 持倉中</div>
-              <div class="intel-meta">原物料 · MEDIUM RISK · 目標 $106–110 了結 30%</div>
-            </div>
-          </div>
-          <div class="intel-item">
-            <svg class="intel-icon ok" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-            <div>
-              <div class="intel-title">月存股完成 · 凱基金 + 中信金</div>
-              <div class="intel-meta">紀律執行 · 4月份 · NT$24,071</div>
-            </div>
-          </div>
-          <div class="intel-item">
-            <svg class="intel-icon info" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <div>
-              <div class="intel-title">聯電暫不追擊</div>
-              <div class="intel-meta">等待 55–56 回測買點</div>
-            </div>
+        <div class="card-body discipline-body">
+          <div class="discipline-scroll">
+            <table class="discipline-table" id="discipline-table">
+              <thead>
+                <tr>
+                  <th>SYMBOL</th>
+                  <th>NAME</th>
+                  <th class="num">現價</th>
+                  <th class="num">均價</th>
+                  <th class="num">P/L %</th>
+                  <th class="num">目標價</th>
+                  <th class="num">距目標</th>
+                  <th class="num">停損</th>
+                  <th class="num">距停損</th>
+                  <th>狀態</th>
+                </tr>
+              </thead>
+              <tbody><tr><td colspan="10" class="empty">載入中…</td></tr></tbody>
+            </table>
           </div>
         </div>
       </div>
-    </div>
+    </section>
 
   </div>
 
@@ -170,19 +166,11 @@
       </div>
       <div class="footer-col">
         <h4>導航</h4>
-        <ul>
-          <li><a href="/">首頁</a></li>
-          <li><a href="/dashboard">儀表板</a></li>
-          <li><a href="/positions">持股</a></li>
-          <li><a href="/trades">交易</a></li>
-        </ul>
+        <ul><li><a href="/">首頁</a></li><li><a href="/positions">持股</a></li><li><a href="/trades">交易</a></li></ul>
       </div>
       <div class="footer-col">
         <h4>分析</h4>
-        <ul>
-          <li><a href="/fundamentals">基本面</a></li>
-          <li><a href="/stocks">股票註冊</a></li>
-        </ul>
+        <ul><li><a href="/fundamentals">基本面</a></li><li><a href="/stocks">股票註冊</a></li></ul>
       </div>
     </div>
     <div class="footer-bottom">
@@ -191,25 +179,8 @@
     </div>
   </footer>
 
-  <script src="/static/terminal.js?v=20260408"></script>
-  <script>
-    async function loadIndex() {
-      try {
-        const navRes = await fetch('/api/nav');
-        const nav = await navRes.json();
-        const equityCost = nav.total_cost || 0;
-        const cash = nav.cash || 0;
-        const totalNav = equityCost + cash;
-        document.getElementById('nav-value').textContent = Math.round(totalNav).toLocaleString();
-        document.getElementById('nav-time').textContent = new Date().toLocaleDateString('zh-TW');
-        document.getElementById('cash-value').textContent = 'NT$ ' + Math.round(cash).toLocaleString();
-        document.getElementById('equity-value').textContent = 'NT$ ' + Math.round(equityCost).toLocaleString();
-        document.getElementById('pos-count').textContent = '—';
-        document.getElementById('footer-time').textContent = new Date().toLocaleString('zh-TW');
-      } catch(e) { console.error(e); }
-    }
-    loadIndex();
-    setInterval(loadIndex, 60000);
-  </script>
+  <script src="/static/terminal.js?v=20260408b"></script>
+  <script src="/static/dashboard-charts.js?v=20260408b"></script>
+  <script src="/static/dashboard.js?v=20260408b"></script>
 </body>
 </html>
