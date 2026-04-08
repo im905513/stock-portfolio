@@ -114,6 +114,45 @@ def init_db():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(stock_id, price_date)
         );
+        CREATE TABLE IF NOT EXISTS nav_history (
+            date DATE PRIMARY KEY,
+            total_value REAL NOT NULL,
+            cash REAL NOT NULL,
+            equity_value REAL NOT NULL,
+            twii_close REAL,
+            sp500_close REAL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS allocation_targets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope TEXT NOT NULL CHECK(scope IN ('sector','stock','style','region')),
+            key TEXT NOT NULL,
+            target_pct REAL NOT NULL,
+            note TEXT,
+            UNIQUE(scope, key)
+        );
+        CREATE TABLE IF NOT EXISTS alert_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope TEXT NOT NULL CHECK(scope IN ('stock','portfolio')),
+            target TEXT,
+            metric TEXT NOT NULL,
+            op TEXT NOT NULL CHECK(op IN ('>','<','>=','<=')),
+            threshold REAL NOT NULL,
+            severity TEXT DEFAULT 'info' CHECK(severity IN ('info','warn','critical')),
+            message TEXT,
+            enabled INTEGER DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS thesis (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            stock_id INTEGER REFERENCES stocks(id),
+            trade_id INTEGER REFERENCES trades(id),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            thesis TEXT NOT NULL,
+            exit_condition TEXT,
+            target_price REAL,
+            stop_loss REAL,
+            status TEXT DEFAULT 'active' CHECK(status IN ('active','closed','invalidated'))
+        );
         """)
 
 # ─── Pydantic models ──────────────────────────────────────
@@ -887,5 +926,100 @@ def ticker_data():
         })
     return result
 
+# ─── Settings helpers ─────────────────────────────────────
+
+def setting_get(db, key: str, default=None):
+    row = db.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else default
+
+def setting_set(db, key: str, value: str):
+    db.execute("INSERT INTO settings(key,value) VALUES(?,?) "
+               "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value))
+
+# ─── Goal 2031 ───────────────────────────────────────────
+
+@app.get("/api/goal/2031")
+def goal_2031():
+    """2031 目標進度：NAV 缺口 / CAGR 推算 / 被動收入估算"""
+    from datetime import date as _date
+    target_year = 2031
+    today = _date.today()
+    years_left = max(target_year - today.year, 1)
+
+    with get_db() as db:
+        target_nav = float(setting_get(db, "goal_2031_target_nav", "5000000"))
+        target_passive = float(setting_get(db, "goal_2031_passive_income", "200000"))
+
+        # 目前 NAV：優先用最新 nav_history，否則用 cost-basis fallback
+        latest = db.execute("SELECT date, total_value FROM nav_history ORDER BY date DESC LIMIT 1").fetchone()
+        first = db.execute("SELECT date, total_value FROM nav_history ORDER BY date ASC LIMIT 1").fetchone()
+
+        if latest:
+            current_nav = float(latest["total_value"])
+        else:
+            row = db.execute("""
+                SELECT COALESCE(SUM(CASE WHEN action='deposit' THEN amount
+                                         WHEN action IN ('withdraw','stock_purchase') THEN -amount
+                                         WHEN action='stock_sell' THEN amount
+                                         ELSE 0 END),0) AS cash FROM cash
+            """).fetchone()
+            current_nav = float(row["cash"] or 0)
+
+        # 已實現 CAGR（若有兩筆以上 nav_history）
+        realized_cagr = None
+        projected_year = None
+        if first and latest and first["date"] != latest["date"]:
+            from datetime import datetime as _dt
+            d0 = _dt.fromisoformat(first["date"]).date()
+            d1 = _dt.fromisoformat(latest["date"]).date()
+            days = (d1 - d0).days
+            if days > 0 and float(first["total_value"]) > 0:
+                ratio = current_nav / float(first["total_value"])
+                if ratio > 0:
+                    realized_cagr = ratio ** (365 / days) - 1
+                    if realized_cagr > 0 and current_nav < target_nav:
+                        # solve current * (1+r)^n = target → n = log(target/current)/log(1+r)
+                        import math
+                        n = math.log(target_nav / current_nav) / math.log(1 + realized_cagr)
+                        projected_year = today.year + int(n)
+
+        # 達標所需 CAGR
+        gap = target_nav - current_nav
+        implied_cagr = None
+        if current_nav > 0 and gap > 0:
+            implied_cagr = (target_nav / current_nav) ** (1 / years_left) - 1
+
+        # 被動收入年化估算（持股 × 殖利率）— 沒抓殖利率時用 0
+        # （fundamentals.dividend_yield 在 ai/stock 升級後會自動進來，這裡先給 0 placeholder）
+        forward_dividend = 0.0
+        ytd_dividend = float(db.execute("""
+            SELECT COALESCE(SUM(t.shares * t.price), 0) AS d
+            FROM trades t
+            WHERE t.action='dividend' AND strftime('%Y', t.trade_date) = strftime('%Y','now')
+        """).fetchone()["d"] or 0)
+
+    return {
+        "target_year": target_year,
+        "target_nav": target_nav,
+        "target_passive_income": target_passive,
+        "current_nav": round(current_nav, 0),
+        "gap": round(gap, 0),
+        "years_left": years_left,
+        "implied_cagr_required": round(implied_cagr, 4) if implied_cagr else None,
+        "realized_cagr": round(realized_cagr, 4) if realized_cagr else None,
+        "projected_target_year_at_current_pace": projected_year,
+        "income": {
+            "ytd_dividend": round(ytd_dividend, 0),
+            "forward_annual_estimate": round(forward_dividend, 0),
+            "passive_income_progress_pct": round(forward_dividend / target_passive * 100, 2) if target_passive else 0,
+        },
+        "note": "realized_cagr / projected 年至少要兩天 nav_history 才會出現" if realized_cagr is None else None,
+    }
+
+
 # ─── Init ─────────────────────────────────────────────────
 init_db()
+
+# ─── AI namespace router ──────────────────────────────────
+from ai_routes import router as ai_router  # noqa: E402
+app.include_router(ai_router)
