@@ -44,18 +44,19 @@ async function loadTicker() {
     { symbol: 'GDX', name: 'Gold Miners', price: 94.97, change_pct: 1.23 },
   ];
 
-  let tickers = fallback;
+  // 逐檔補值：API 回傳的用 API，缺的或 price<=0 的套 fallback
+  let apiData = [];
   try {
     const res = await fetch('/api/ticker');
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.length > 0) {
-        tickers = data;
-      }
-    }
-  } catch (e) {
-    // Use fallback on network error
-  }
+    if (res.ok) apiData = await res.json() || [];
+  } catch (e) { /* network error → 全部用 fallback */ }
+
+  const bySym = {};
+  apiData.forEach(t => { if (t && t.symbol) bySym[t.symbol] = t; });
+  const tickers = fallback.map(f => {
+    const live = bySym[f.symbol];
+    return (live && live.price > 0) ? live : f;
+  });
 
   const renderItems = (items) => items.map(t => {
     const pct = t.change_pct || 0;

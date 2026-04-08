@@ -280,106 +280,135 @@ def fetch_finmind(dataset, symbol, start, end, token=""):
     with urllib.request.urlopen(url, timeout=10) as r:
         return json.loads(r.read())
 
-def fetch_twse_realtime(symbol: str):
-    """TWSE 即時報價（台股， symbol如 2330）"""
-    import subprocess
-    try:
-        # 格式: ex_ch=tse_{symbol}.tw 或 otc_{symbol}.tw
-        url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{symbol}.tw&json=1&delay=0"
-        cmd = ["curl", "-s", "--max-time", "8", url]
-        raw = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8", errors="ignore")
-        data = json.loads(raw)
-        arr = data.get("msgArray", [])
-        if not arr:
-            return {"error": "無資料"}
-        r = arr[0]
-        price_str = r.get("z", "").strip()
-        price = float(price_str) if price_str and price_str != "-" else 0
-        y_str = r.get("y", "").strip()
-        y = float(y_str) if y_str and y_str != "-" else 0
-        chg = round(price - y, 2) if price and y else 0
-        chg_pct = round(chg / y * 100, 2) if y else 0
-        chg_str = r.get("p", "").strip()
-        return {
-            "symbol": r.get("c", symbol),
-            "name": r.get("n", ""),
-            "price": price,
-            "open": float(r.get("o", 0)) or 0,
-            "high": float(r.get("h", 0)) or 0,
-            "low": float(r.get("l", 0)) or 0,
-            "volume": int(r.get("v", 0)) or 0,
-            "change": chg,
-            "change_pct": chg_pct,
-            "change_str": chg_str,
-            "prev_close": y,
-            "time": r.get("t", ""),
-            "raw": r
-        }
-    except Exception as e:
-        return {"error": str(e)}
+# ─── Quote cache (in-memory TTL) ─────────────────────────
+import time, sys
+from concurrent.futures import ThreadPoolExecutor
 
-def fetch_twse_batch(symbols: list):
-    """批次查 TWSE 多檔即時報價（一次一檔）"""
-    import subprocess
-    result = {}
-    for sym in symbols:
+_QUOTE_CACHE = {}  # key -> (expires_ts, value)
+_TWSE_TTL = 30     # 秒
+_AV_TTL = 120      # Alpha Vantage 限流嚴，快取久一點
+
+def _cache_get(key):
+    hit = _QUOTE_CACHE.get(key)
+    if hit and hit[0] > time.time():
+        return hit[1]
+    return None
+
+def _cache_set(key, value, ttl):
+    _QUOTE_CACHE[key] = (time.time() + ttl, value)
+
+_TWSE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36",
+    "Referer": "https://mis.twse.com.tw/stock/fibest.jsp",
+    "Accept": "application/json, text/plain, */*",
+}
+
+def _twse_fetch_one(sym: str):
+    """單檔查 TWSE MIS，先試 tse_ 再試 otc_；回傳 parsed dict 或 None"""
+    for prefix in ("tse", "otc"):
         try:
-            url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{sym}.tw&json=1&delay=0"
-            cmd = ["curl", "-s", "--max-time", "5", url]
-            raw = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode("utf-8", errors="ignore")
-            data = json.loads(raw)
+            url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch={prefix}_{sym}.tw&json=1&delay=0&_={int(time.time()*1000)}"
+            req = urllib.request.Request(url, headers=_TWSE_HEADERS)
+            with urllib.request.urlopen(req, timeout=6) as r:
+                data = json.loads(r.read())
             arr = data.get("msgArray", [])
             if not arr:
                 continue
-            r = arr[0]
-            sym_code = r.get("c", "").strip()
-            if not sym_code:
-                continue
-            price_str = r.get("z", "").strip()
-            y_str = r.get("y", "").strip()
+            r0 = arr[0]
+            price_str = (r0.get("z") or "").strip()
+            y_str = (r0.get("y") or "").strip()
+            pz_str = (r0.get("pz") or "").strip()  # 參考價
+            o_str = (r0.get("o") or "").strip()
             y = float(y_str) if y_str and y_str != "-" else 0
-            # 盤中用現價，收盤後用收盤參考價
+            # 現價三層 fallback：z (即時) → pz (參考價) → y (昨收) → o (開盤)
             if price_str and price_str != "-":
                 price = float(price_str)
+            elif pz_str and pz_str != "-":
+                price = float(pz_str)
             elif y:
-                price = y  # 收盤後用昨收當現價
+                price = y
+            elif o_str and o_str != "-":
+                price = float(o_str)
             else:
                 price = 0
             chg = round(price - y, 2) if price and y else 0
             chg_pct = round(chg / y * 100, 2) if y else 0
-            result[sym] = {
+            return {
+                "symbol": r0.get("c", sym),
+                "name": (r0.get("n") or "").strip(),
                 "price": price,
+                "open": float(o_str) if o_str and o_str != "-" else 0,
+                "high": float(r0.get("h") or 0) or 0,
+                "low": float(r0.get("l") or 0) or 0,
+                "volume": int(r0.get("v") or 0) or 0,
                 "change": chg,
                 "change_pct": chg_pct,
-                "open": float(r.get("o", 0)) or 0,
-                "high": float(r.get("h", 0)) or 0,
-                "low": float(r.get("l", 0)) or 0,
-                "volume": int(r.get("v", 0)) or 0,
-                "name": r.get("n", ""),
-                "time": r.get("t", ""),
+                "prev_close": y,
+                "time": r0.get("t", ""),
             }
-        except Exception:
+        except Exception as e:
+            print(f"[TWSE] {prefix}_{sym} error: {e}", file=sys.stderr)
             continue
+    return None
+
+def fetch_twse_realtime(symbol: str):
+    """TWSE 即時報價（台股， symbol如 2330）"""
+    cached = _cache_get(f"twse:{symbol}")
+    if cached is not None:
+        return cached
+    res = _twse_fetch_one(symbol)
+    if res is None:
+        return {"error": "無資料"}
+    _cache_set(f"twse:{symbol}", res, _TWSE_TTL)
+    return res
+
+def fetch_twse_batch(symbols: list):
+    """批次查 TWSE 多檔即時報價（並行 + TTL 快取）"""
+    result = {}
+    missing = []
+    for sym in symbols:
+        c = _cache_get(f"twse:{sym}")
+        if c is not None:
+            result[sym] = c
+        else:
+            missing.append(sym)
+    if missing:
+        with ThreadPoolExecutor(max_workers=min(8, len(missing))) as ex:
+            for sym, data in zip(missing, ex.map(_twse_fetch_one, missing)):
+                if data is not None:
+                    result[sym] = data
+                    _cache_set(f"twse:{sym}", data, _TWSE_TTL)
     return result
 
 def fetch_alphavantage(symbol: str, key: str = ""):
-    """Alpha Vantage 美股即時報價"""
+    """Alpha Vantage 美股即時報價（含 TTL 快取，避開 5 req/min 限流）"""
+    cache_key = f"av:{symbol}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     key = key or ALPHA_KEY
     try:
         url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={key}"
-        with urllib.request.urlopen(url, timeout=10) as r:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as r:
             data = json.loads(r.read())
-        q = data.get("Global Quote", {})
-        if q:
-            return {
+        if data.get("Note") or data.get("Information"):
+            print(f"[AlphaVantage] rate-limited: {data}", file=sys.stderr)
+            # 限流時回前次快取（若有）讓前端不要閃空
+            return {"error": "rate_limited"}
+        q = data.get("Global Quote", {}) or {}
+        if q and q.get("05. price"):
+            result = {
                 "symbol": symbol,
                 "price": float(q.get("05. price", 0)),
-                "change": float(q.get("09. change", 0)),
-                "change_pct": float(q.get("10. change percent", "0").replace("%","")),
-                "raw": q
+                "change": float(q.get("09. change", 0) or 0),
+                "change_pct": float((q.get("10. change percent") or "0").replace("%", "")),
             }
+            _cache_set(cache_key, result, _AV_TTL)
+            return result
         return {"error": "無資料"}
     except Exception as e:
+        print(f"[AlphaVantage] {symbol} error: {e}", file=sys.stderr)
         return {"error": str(e)}
 
 # ─── 即時報價 API ────────────────────────────────────────
