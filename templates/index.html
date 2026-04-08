@@ -8,7 +8,7 @@
 </head>
 <body>
 
-  <!-- Header -->
+  <!-- ─── Header ─── -->
   <header class="site-header">
     <a href="/" class="header-brand">
       <div class="logo-mark">
@@ -25,12 +25,14 @@
     </div>
   </header>
 
-  <!-- Ticker -->
+  <!-- ─── Ticker Bar ─── -->
   <div class="ticker-bar">
-    <div class="ticker-track" id="ticker-track"><span class="ticker-loading">載入即時數據中...</span></div>
+    <div class="ticker-track" id="ticker-track">
+      <span class="ticker-loading">載入即時數據中...</span>
+    </div>
   </div>
 
-  <!-- Pill Nav -->
+  <!-- ─── Pill Nav ─── -->
   <nav class="pill-nav">
     <a href="/" class="nav-link active">
       <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -58,15 +60,19 @@
     </a>
   </nav>
 
-  <!-- Page -->
+  <!-- ─── Main ─── -->
   <div class="page-wrapper">
 
+    <!-- Hero -->
     <div class="hero-card">
       <div class="hero-label">MISSION OBJECTIVE · 2031</div>
-      <div class="hero-headline">年被動收入 <span class="highlight">NT$200,000</span></div>
+      <div class="hero-headline">
+        年被動收入 <span class="highlight">NT$200,000</span>
+      </div>
       <div class="hero-sub">月投 NT$25,000 存股 + 題材帳戶紀律操作。有題材攻，沒題材守。</div>
     </div>
 
+    <!-- Objective Grid -->
     <div class="card" style="margin-bottom:20px">
       <div class="card-body">
         <div class="obj-grid">
@@ -90,6 +96,7 @@
       </div>
     </div>
 
+    <!-- NAV + Quick Actions -->
     <div class="grid-2">
       <div class="card">
         <div class="card-header">
@@ -98,14 +105,25 @@
         </div>
         <div class="card-body">
           <div class="big-stat" id="nav-value">--</div>
-          <div class="stat-row"><span class="label">現金 Cash</span><span class="value" id="cash-value">--</span></div>
-          <div class="stat-row"><span class="label">股票成本 Equity Cost</span><span class="value" id="equity-value">--</span></div>
-          <div class="stat-row"><span class="label">持股檔數 Positions</span><span class="value" id="pos-count">--</span></div>
+          <div class="stat-row">
+            <span class="label">現金 Cash</span>
+            <span class="value" id="cash-value">--</span>
+          </div>
+          <div class="stat-row">
+            <span class="label">股票成本 Equity Cost</span>
+            <span class="value" id="equity-value">--</span>
+          </div>
+          <div class="stat-row">
+            <span class="label">持股檔數 Positions</span>
+            <span class="value" id="pos-count">--</span>
+          </div>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-header"><span class="card-title">QUICK ACTIONS</span></div>
+        <div class="card-header">
+          <span class="card-title">QUICK ACTIONS</span>
+        </div>
         <div class="card-body">
           <a href="/trades" class="action-btn primary">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
@@ -127,6 +145,7 @@
       </div>
     </div>
 
+    <!-- Intel Feed -->
     <div class="card">
       <div class="card-header">
         <span class="card-title">INTEL FEED</span>
@@ -161,7 +180,7 @@
 
   </div>
 
-  <!-- Footer -->
+  <!-- ─── Footer ─── -->
   <footer class="site-footer">
     <div class="footer-inner">
       <div class="footer-brand">
@@ -195,7 +214,7 @@
   <script>
     async function loadIndex() {
       try {
-        const navRes = await fetch('/api/nav');
+        const [navRes] = await Promise.all([fetch('/api/nav')]);
         const nav = await navRes.json();
         const equityCost = nav.total_cost || 0;
         const cash = nav.cash || 0;
