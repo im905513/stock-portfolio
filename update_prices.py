@@ -154,5 +154,13 @@ def main():
     print(f"\n  總 NAV: NT${total_nav:,.0f}")
     conn.close()
 
+    # 觸發三值估價重算（失敗不影響股價更新）
+    try:
+        import main as _m
+        r = _m.refresh_valuations()
+        print(f"\n  [valuation] 重算 {r['ok']}/{r['total']}，失敗 {r['failed']}")
+    except Exception as e:
+        print(f"\n  [valuation] 重算失敗: {e}")
+
 if __name__ == "__main__":
     main()

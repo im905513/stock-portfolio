@@ -801,13 +801,31 @@ def ai_discover(
         watch_rows = db.execute("SELECT symbol FROM stocks WHERE watch_status='watchlist'").fetchall()
         in_watchlist = {r["symbol"] for r in watch_rows}
 
+    # 讀取 valuations 快取表，補上估價標籤
+    valuation_map = {}
+    with get_db() as db:
+        rows = db.execute(
+            "SELECT symbol, tag, cheap_price, fair_price, expensive_price, current_price, category, method FROM valuations"
+        ).fetchall()
+        for r in rows:
+            valuation_map[r["symbol"]] = dict(r)
+
     filtered = []
     for c in cached:
         if c["symbol"] in excluded:
             continue
         if c["score"] < min_score:
             continue
-        filtered.append({**c, "in_watchlist": c["symbol"] in in_watchlist})
+        v = valuation_map.get(c["symbol"]) or {}
+        filtered.append({
+            **c,
+            "in_watchlist": c["symbol"] in in_watchlist,
+            "valuation_tag": v.get("tag"),
+            "cheap_price": v.get("cheap_price"),
+            "fair_price": v.get("fair_price"),
+            "expensive_price": v.get("expensive_price"),
+            "valuation_category": v.get("category"),
+        })
         if len(filtered) >= limit:
             break
 

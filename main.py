@@ -341,6 +341,123 @@ def fetch_finmind(dataset, symbol, start, end, token=""):
     with urllib.request.urlopen(url, timeout=10) as r:
         return json.loads(r.read())
 
+def fetch_finmind_financial_statements(symbol, quarters=8, token=""):
+    """近 N 季 EPS（從 TaiwanStockFinancialStatements）。
+
+    FinMind 該 dataset 包含 EPS / Revenue / NetIncome 等；EPS type == 'EPS'。
+    回傳 list[float]，按日期由舊到新排序。
+    """
+    cache_key = f"finmind:fin_stmt:{symbol}:{quarters}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    today = date.today()
+    start = (today - timedelta(days=int(quarters * 95))).isoformat()
+    end = today.isoformat()
+    try:
+        raw = fetch_finmind("TaiwanStockFinancialStatements", symbol, start, end, token)
+    except Exception:
+        return []
+    rows = raw.get("data") or []
+    # type 欄位：EPS / Revenue / NetIncome 等；有些為英文有些中文
+    eps_rows = [r for r in rows if (r.get("type") or "").upper() == "EPS"]
+    eps_rows.sort(key=lambda r: r.get("date") or "")
+    # 去重同一季（同 date 取最後一筆）
+    seen = {}
+    for r in eps_rows:
+        seen[r.get("date")] = r
+    ordered = [seen[d] for d in sorted(seen.keys())]
+    values = []
+    for r in ordered[-quarters:]:
+        v = r.get("value")
+        try:
+            values.append(float(v) if v is not None else None)
+        except (TypeError, ValueError):
+            values.append(None)
+    _cache_set(cache_key, values, 86400)
+    return values
+
+
+def fetch_finmind_dividend(symbol, years=5, token=""):
+    """近 N 年現金股利（TaiwanStockDividend，CashEarningsDistribution）。
+
+    回傳 list[float]，按年份由舊到新。
+    """
+    cache_key = f"finmind:dividend:{symbol}:{years}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    today = date.today()
+    start = (today - timedelta(days=int((years + 2) * 380))).isoformat()
+    end = today.isoformat()
+    try:
+        raw = fetch_finmind("TaiwanStockDividend", symbol, start, end, token)
+    except Exception:
+        return []
+    rows = raw.get("data") or []
+    # 依年份彙總現金股利 (CashEarningsDistribution + CashStatutorySurplus)
+    by_year = {}
+    for r in rows:
+        y = (r.get("year") or (r.get("date") or "")[:4]) or ""
+        if not y:
+            continue
+        cash = 0.0
+        for k in ("CashEarningsDistribution", "CashStatutorySurplus", "CashExDividendTradingDate"):
+            v = r.get(k)
+            try:
+                if v is not None:
+                    cash += float(v)
+            except (TypeError, ValueError):
+                pass
+        # 某些 feed 直接給 stock_dividend / cash_dividend 欄位
+        if cash == 0.0:
+            v = r.get("cash_dividend") or r.get("CashDividend")
+            try:
+                if v is not None:
+                    cash = float(v)
+            except (TypeError, ValueError):
+                pass
+        by_year[y] = by_year.get(y, 0.0) + cash
+    ordered = [by_year[y] for y in sorted(by_year.keys())][-years:]
+    _cache_set(cache_key, ordered, 86400)
+    return ordered
+
+
+def fetch_finmind_per_history(symbol, days=365 * 5, token=""):
+    """近 N 日歷史 PER + PBR（TaiwanStockPER）。回 (per_list, pbr_list, latest_row)。"""
+    cache_key = f"finmind:per_hist:{symbol}:{days}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+    today = date.today()
+    start = (today - timedelta(days=days)).isoformat()
+    end = today.isoformat()
+    try:
+        raw = fetch_finmind("TaiwanStockPER", symbol, start, end, token)
+    except Exception:
+        return ([], [], None)
+    rows = raw.get("data") or []
+    per_values = []
+    pbr_values = []
+    for r in rows:
+        p = r.get("PER")
+        b = r.get("PBR")
+        try:
+            if p is not None:
+                per_values.append(float(p))
+        except (TypeError, ValueError):
+            pass
+        try:
+            if b is not None:
+                pbr_values.append(float(b))
+        except (TypeError, ValueError):
+            pass
+    latest = rows[-1] if rows else None
+    out = (per_values, pbr_values, latest)
+    _cache_set(cache_key, out, 86400)
+    return out
+
+
 def fetch_finmind_stock_info(token=""):
     """全台股清單 (TaiwanStockInfo) — symbol/name/industry。24h cache。"""
     cached = _cache_get("finmind:stock_info")
@@ -906,6 +1023,8 @@ def trades_page(): return _no_cache_response(f"{STATIC_DIR}/trades.html")
 def positions_page(): return _no_cache_response(f"{STATIC_DIR}/positions.html")
 @app.get("/watchlist")
 def watchlist_page(): return _no_cache_response(f"{STATIC_DIR}/watchlist.html")
+@app.get("/valuation")
+def valuation_page(): return _no_cache_response(f"{STATIC_DIR}/valuation.html")
 
 # ─── Ticker ───────────────────────────────────────────────
 @app.get("/api/ticker")
@@ -1156,6 +1275,254 @@ def dashboard_watchlist_remove(body: _WatchAddBody, _ok: bool = Depends(_localho
         cur = db.execute("UPDATE stocks SET watch_status='archived' WHERE symbol=? AND watch_status='watchlist'", (body.symbol,))
         db.commit()
         return {"ok": True, "affected": cur.rowcount}
+
+
+# ─── 價差評估 (三值估價) ──────────────────────────────────
+from valuation import (
+    calc_pe_valuation, calc_pe_percentiles,
+    calc_pbr_valuation, calc_pbr_percentiles,
+    estimate_forward_eps, classify_price, classify_category,
+)
+
+
+def _compute_valuation_for(symbol: str, industry: str | None, stock_type: str | None = None) -> dict | None:
+    """同時計算 PE 法 + PBR 法三值估價。"""
+    category, _ = classify_category(symbol, industry, stock_type)
+
+    today = date.today()
+    try:
+        raw = fetch_finmind("TaiwanStockPrice", symbol,
+                            (today - timedelta(days=10)).isoformat(), today.isoformat())
+        current = float(raw["data"][-1]["close"]) if raw.get("data") else None
+    except Exception:
+        current = None
+
+    result = {
+        "symbol": symbol, "method": "pe+pbr", "category": category,
+        "eps_used": None, "eps_growth_ytd": None, "avg_dividend": None,
+        "pe_low": None, "pe_mid": None, "pe_high": None,
+        "cheap_price": None, "fair_price": None, "expensive_price": None,
+        "bps": None,
+        "pbr_low": None, "pbr_mid": None, "pbr_high": None,
+        "pbr_cheap_price": None, "pbr_fair_price": None, "pbr_expensive_price": None,
+        "pbr_tag": None,
+        "current_price": current, "tag": None, "source": "self",
+    }
+
+    # 歷史 PE 用 5 年窗口，PBR 用 3 年窗口（分別對齊付費 app 的 median）
+    per_hist_5y, _, _ = fetch_finmind_per_history(symbol, days=365 * 5)
+    _, pbr_hist, latest = fetch_finmind_per_history(symbol, days=365 * 3)
+    per_hist = per_hist_5y
+
+    # ─── PE 法 ───
+    eps_q = fetch_finmind_financial_statements(symbol, quarters=8)
+    fwd, growth = estimate_forward_eps(eps_q)
+    pe_low, pe_mid, pe_high = calc_pe_percentiles(per_hist)
+    pe_val = calc_pe_valuation(fwd, pe_low, pe_mid, pe_high)
+    result.update({
+        "eps_used": fwd, "eps_growth_ytd": growth,
+        "pe_low": pe_low, "pe_mid": pe_mid, "pe_high": pe_high,
+        "cheap_price": pe_val["cheap"], "fair_price": pe_val["fair"], "expensive_price": pe_val["expensive"],
+        "tag": classify_price(current, pe_val["cheap"], pe_val["fair"], pe_val["expensive"]),
+    })
+
+    # ─── PBR 法 ───
+    # BPS 反推：對近 30 個交易日分別 (close / PBR) 後取中位數，消除 PBR 2 位小數的 rounding 誤差
+    bps = None
+    try:
+        start_30 = (today - timedelta(days=60)).isoformat()
+        price_raw = fetch_finmind("TaiwanStockPrice", symbol, start_30, today.isoformat())
+        price_by_date = {r["date"]: float(r["close"]) for r in (price_raw.get("data") or []) if r.get("close")}
+
+        per_raw = fetch_finmind("TaiwanStockPER", symbol, start_30, today.isoformat())
+        pbr_by_date = {r["date"]: float(r["PBR"]) for r in (per_raw.get("data") or []) if r.get("PBR")}
+
+        bps_samples = []
+        for d, px in price_by_date.items():
+            pbr_d = pbr_by_date.get(d)
+            if pbr_d and pbr_d > 0:
+                bps_samples.append(px / pbr_d)
+        if bps_samples:
+            bps_samples.sort()
+            bps = round(bps_samples[len(bps_samples) // 2], 2)
+    except Exception:
+        bps = None
+    pbr_low, pbr_mid, pbr_high = calc_pbr_percentiles(pbr_hist)
+    pbr_val = calc_pbr_valuation(bps, pbr_low, pbr_mid, pbr_high)
+    result.update({
+        "bps": bps,
+        "pbr_low": pbr_low, "pbr_mid": pbr_mid, "pbr_high": pbr_high,
+        "pbr_cheap_price": pbr_val["cheap"], "pbr_fair_price": pbr_val["fair"], "pbr_expensive_price": pbr_val["expensive"],
+        "pbr_tag": classify_price(current, pbr_val["cheap"], pbr_val["fair"], pbr_val["expensive"]),
+    })
+
+    return result
+
+
+def _upsert_valuation(db, stock_id: int, v: dict):
+    db.execute("""
+        INSERT INTO valuations (
+            stock_id, symbol, method, category, eps_used, eps_growth_ytd, avg_dividend,
+            pe_low, pe_mid, pe_high, cheap_price, fair_price, expensive_price,
+            bps, pbr_low, pbr_mid, pbr_high,
+            pbr_cheap_price, pbr_fair_price, pbr_expensive_price, pbr_tag,
+            current_price, tag, source, computed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(stock_id) DO UPDATE SET
+            symbol=excluded.symbol,
+            method=excluded.method,
+            category=excluded.category,
+            eps_used=excluded.eps_used,
+            eps_growth_ytd=excluded.eps_growth_ytd,
+            avg_dividend=excluded.avg_dividend,
+            pe_low=excluded.pe_low, pe_mid=excluded.pe_mid, pe_high=excluded.pe_high,
+            cheap_price=excluded.cheap_price,
+            fair_price=excluded.fair_price,
+            expensive_price=excluded.expensive_price,
+            bps=excluded.bps,
+            pbr_low=excluded.pbr_low, pbr_mid=excluded.pbr_mid, pbr_high=excluded.pbr_high,
+            pbr_cheap_price=excluded.pbr_cheap_price,
+            pbr_fair_price=excluded.pbr_fair_price,
+            pbr_expensive_price=excluded.pbr_expensive_price,
+            pbr_tag=excluded.pbr_tag,
+            current_price=excluded.current_price,
+            tag=excluded.tag,
+            source=excluded.source,
+            computed_at=excluded.computed_at
+    """, (
+        stock_id, v["symbol"], v["method"], v["category"], v["eps_used"], v["eps_growth_ytd"],
+        v.get("avg_dividend"), v["pe_low"], v["pe_mid"], v["pe_high"],
+        v["cheap_price"], v["fair_price"], v["expensive_price"],
+        v.get("bps"), v.get("pbr_low"), v.get("pbr_mid"), v.get("pbr_high"),
+        v.get("pbr_cheap_price"), v.get("pbr_fair_price"), v.get("pbr_expensive_price"), v.get("pbr_tag"),
+        v["current_price"], v["tag"], v["source"], datetime.utcnow().isoformat(),
+    ))
+
+
+def refresh_valuations(symbols: list[str] | None = None, max_workers: int = 6) -> dict:
+    """批次重算 valuations 表。symbols=None 時跑 stocks 表所有 TW 股票。"""
+    with get_db() as db:
+        if symbols:
+            placeholders = ",".join("?" * len(symbols))
+            rows = db.execute(
+                f"SELECT id, symbol, sector FROM stocks WHERE symbol IN ({placeholders})",
+                symbols,
+            ).fetchall()
+        else:
+            rows = db.execute(
+                "SELECT id, symbol, sector FROM stocks WHERE market='TW'"
+            ).fetchall()
+        targets = [(r["id"], r["symbol"], r["sector"]) for r in rows]
+
+    ok, failed = 0, 0
+
+    def _work(item):
+        stock_id, symbol, sector = item
+        try:
+            v = _compute_valuation_for(symbol, sector, None)
+            return (stock_id, v, None)
+        except Exception as e:
+            return (stock_id, None, str(e))
+
+    results = []
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        for r in ex.map(_work, targets):
+            results.append(r)
+
+    with get_db() as db:
+        for stock_id, v, err in results:
+            if err or v is None:
+                failed += 1
+                continue
+            try:
+                _upsert_valuation(db, stock_id, v)
+                ok += 1
+            except Exception as e:
+                print(f"[valuation] upsert error {stock_id}: {e}")
+                failed += 1
+        db.commit()
+
+    return {"ok": ok, "failed": failed, "total": len(targets)}
+
+
+@app.get("/api/valuation/by-id/{stock_id}")
+def get_valuation_v2(stock_id: int, refresh: bool = False):
+    """單檔三值估價。預設讀快取（<24h），refresh=true 即時重算。"""
+    with get_db() as db:
+        stock = db.execute("SELECT * FROM stocks WHERE id=?", (stock_id,)).fetchone()
+        if not stock:
+            raise HTTPException(404, "找不到這檔股票")
+        stock = dict(stock)
+
+        if not refresh:
+            row = db.execute(
+                "SELECT * FROM valuations WHERE stock_id=?", (stock_id,)
+            ).fetchone()
+            if row:
+                computed_at = row["computed_at"]
+                try:
+                    age = (datetime.utcnow() - datetime.fromisoformat(computed_at)).total_seconds()
+                except Exception:
+                    age = 99999
+                if age < 86400:
+                    return {"stock": stock, "valuation": dict(row), "cached": True}
+
+    # compute
+    if stock["market"] != "TW":
+        raise HTTPException(400, "目前只支援台股")
+    v = _compute_valuation_for(stock["symbol"], stock.get("sector"), None)
+    with get_db() as db:
+        _upsert_valuation(db, stock_id, v)
+        db.commit()
+        row = db.execute("SELECT * FROM valuations WHERE stock_id=?", (stock_id,)).fetchone()
+    return {"stock": stock, "valuation": dict(row) if row else v, "cached": False}
+
+
+@app.get("/api/valuation/list")
+def list_valuations(
+    category: Optional[str] = Query(None),
+    tag: Optional[str] = Query(None),
+    sort: str = Query("discount", description="discount|score|symbol"),
+    limit: int = Query(50, ge=1, le=500),
+):
+    """查詢估價清單，支援分類 / 標籤過濾。預設按折價率（current/fair）升冪。"""
+    where = ["v.fair_price IS NOT NULL", "v.current_price IS NOT NULL"]
+    params: list = []
+    if category:
+        where.append("v.category = ?")
+        params.append(category)
+    if tag:
+        where.append("v.tag = ?")
+        params.append(tag)
+
+    order_by = {
+        "discount": "(v.current_price * 1.0 / v.fair_price) ASC",
+        "symbol": "v.symbol ASC",
+        "score": "v.computed_at DESC",
+    }.get(sort, "(v.current_price * 1.0 / v.fair_price) ASC")
+
+    sql = f"""
+        SELECT v.*, s.name, s.sector, s.id AS stock_id
+        FROM valuations v
+        JOIN stocks s ON s.id = v.stock_id
+        WHERE {' AND '.join(where)}
+        ORDER BY {order_by}
+        LIMIT ?
+    """
+    params.append(limit)
+    with get_db() as db:
+        rows = db.execute(sql, params).fetchall()
+        return {"count": len(rows), "items": [dict(r) for r in rows]}
+
+
+class _ValRefreshBody(BaseModel):
+    symbols: Optional[list[str]] = None
+
+
+@app.post("/api/valuation/refresh")
+def api_refresh_valuations(body: _ValRefreshBody, _ok: bool = Depends(_localhost_only)):
+    """觸發全市場（或指定 symbols）重算。localhost-only。"""
+    return refresh_valuations(body.symbols)
 
 
 # ─── Migrations (additive, run-once, ordered) ──────────────
